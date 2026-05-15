@@ -1,0 +1,43 @@
+@startuml
+title Attendance System Overview
+left to right direction
+skinparam shadowing false
+skinparam packageStyle rectangle
+
+actor Employee
+actor "Kiosk Terminal" as Kiosk
+actor "AI Service" as AI
+
+rectangle "Attendance System" {
+  usecase "Face Registration" as UC_FaceReg
+  usecase "Face Recognition" as UC_FaceRecog
+  usecase "Check In / Check Out" as UC_Attendance
+  usecase "Attendance Log Sync" as UC_Sync
+}
+
+Employee --> UC_FaceReg
+Employee --> UC_Attendance
+
+Kiosk --> UC_FaceReg
+Kiosk --> UC_FaceRecog
+Kiosk --> UC_Attendance
+Kiosk --> UC_Sync
+
+AI --> UC_FaceReg
+AI --> UC_FaceRecog
+
+note right of UC_FaceReg
+Detailed diagrams in:
+ - 03-usecase-face-recognition.puml
+ - 04-activity-face-enrollment.puml
+ - 05-sequence-face-enrollment.puml
+end note
+
+note right of UC_Attendance
+Detailed diagrams in:
+ - 03-usecase-attendance-management.puml
+ - 04-activity-check-in.puml
+ - 05-sequence-check-in.puml
+end note
+
+@enduml

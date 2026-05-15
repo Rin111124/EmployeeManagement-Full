@@ -1,0 +1,27 @@
+@startuml
+title Sequence - Face Enrollment
+actor Employee
+boundary Kiosk
+control AIService as "AI Service"
+control AttService as "Attendance Service"
+database AdminDB as "Admin Database"
+
+Employee -> Kiosk : Bắt đầu đăng ký khuôn mặt
+Kiosk -> Employee : Hướng dẫn các bước chụp
+
+loop 3 face angles
+  Employee -> Kiosk : Cung cấp ảnh khuôn mặt
+  Kiosk -> AIService : POST /enroll (image)
+  AIService -> AIService : quality check and embedding extraction
+  AIService --> Kiosk : embedding / validation result
+end
+
+Kiosk -> AIService : POST /enroll/save (embeddings)
+AIService -> AttService : store face record
+AttService -> AdminDB : save face data
+AdminDB --> AttService : OK
+AttService --> AIService : OK
+AIService --> Kiosk : enrollment success
+Kiosk --> Employee : Hiển thị đăng ký thành công
+
+@enduml

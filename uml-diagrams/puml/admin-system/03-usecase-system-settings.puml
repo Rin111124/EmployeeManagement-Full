@@ -1,0 +1,23 @@
+@startuml
+title Use case chi tiet - System Settings
+left to right direction
+skinparam shadowing false
+skinparam packageStyle rectangle
+
+actor "HR Admin" as Admin
+
+rectangle "System Settings" {
+  usecase "Configure Shifts" as UC_Shift
+  usecase "Manage Devices" as UC_Device
+  usecase "System Configuration" as UC_Config
+  usecase "View Audit Log" as UC_Audit
+  usecase "Backup Data" as UC_Backup
+}
+
+Admin --> UC_Shift
+Admin --> UC_Device
+Admin --> UC_Config
+Admin --> UC_Audit
+Admin --> UC_Backup
+
+@enduml

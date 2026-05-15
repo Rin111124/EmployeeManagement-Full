@@ -1,0 +1,94 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  admin-backend:
+    name: Admin backend tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: admin-system/backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: admin-system/backend/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - run: npm run security:test
+        env:
+          SECURITY_ENV_STRICT: 'true'
+          JWT_ACCESS_SECRET: ci-access-secret-value-at-least-32-characters
+          JWT_REFRESH_SECRET: ci-refresh-secret-value-at-least-32-characters
+          CORS_ORIGIN: http://localhost:3000
+
+  attendance-service:
+    name: Attendance service tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: attendance-system/attendance-service
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: attendance-system/attendance-service/package-lock.json
+      - run: npm ci
+      - run: npm test
+
+  frontend:
+    name: Admin frontend typecheck
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: admin-system/frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: admin-system/frontend/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+
+  mobile:
+    name: Mobile lint
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: attendance-system/mobile-app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: attendance-system/mobile-app/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+
+  ai-service:
+    name: AI service dependency check
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: attendance-system/ai-service
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - run: python -m pip install --upgrade pip
+      - run: pip install -r requirements.txt
+      - run: python -m py_compile main.py

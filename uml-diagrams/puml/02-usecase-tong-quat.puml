@@ -1,0 +1,52 @@
+@startuml
+title Use case tong quat
+left to right direction
+skinparam shadowing false
+skinparam packageStyle rectangle
+
+actor "HR Admin/Manager" as Admin
+actor Employee
+actor "Kiosk Terminal" as Kiosk
+actor "System / AI Service" as AI
+
+rectangle "Admin System" {
+  usecase "Authentication" as UC_Auth
+  usecase "Employee Management" as UC_EmpMgmt
+  usecase "Leave Request" as UC_Leave
+  usecase "Attendance Tracking" as UC_Attendance
+  usecase "Payroll" as UC_Payroll
+  usecase "Device Management" as UC_Device
+  usecase "Dashboard & Reports" as UC_Dashboard
+  usecase "System Settings" as UC_Settings
+}
+
+rectangle "Attendance System" {
+  usecase "Face Registration" as UC_FaceReg
+  usecase "Face Recognition" as UC_FaceRecog
+  usecase "Attendance Log" as UC_AttLog
+  usecase "Data Sync" as UC_Sync
+}
+
+Admin --> UC_EmpMgmt
+Admin --> UC_Dashboard
+Admin --> UC_Settings
+Admin --> UC_Leave
+Admin --> UC_Device
+Admin --> UC_Attendance
+
+Employee --> UC_Leave
+Employee --> UC_Dashboard
+Employee --> UC_Attendance
+
+Kiosk --> UC_FaceReg
+Kiosk --> UC_FaceRecog
+Kiosk --> UC_AttLog
+Kiosk --> UC_Sync
+
+AI --> UC_FaceReg
+AI --> UC_FaceRecog
+
+UC_Attendance ..> UC_FaceRecog : <<include>>
+UC_AttLog ..> UC_Sync : <<extend>>
+
+@enduml

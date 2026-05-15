@@ -1,0 +1,20 @@
+{
+  "name": "employee-management-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev:admin": "concurrently \"npm --prefix admin-system/backend start\" \"npm --prefix admin-system/frontend run dev\"",
+    "dev:attendance": "concurrently \"npm --prefix attendance-system/attendance-service start\" \"npm --prefix attendance-system/mobile-app start\"",
+    "dev:employee-mobile": "npm --prefix attendance-system/employee-mobile-app start",
+    "dev:all": "concurrently \"npm --prefix admin-system/backend start\" \"npm --prefix admin-system/frontend run dev\" \"npm --prefix attendance-system/attendance-service start\" \"npm --prefix attendance-system/mobile-app start\"",
+    "test:admin-backend": "npm --prefix admin-system/backend test",
+    "test:attendance-service": "npm --prefix attendance-system/attendance-service test",
+    "build:admin-frontend": "npm --prefix admin-system/frontend run build",
+    "lint:admin-frontend": "npm --prefix admin-system/frontend run lint",
+    "lint:mobile": "npm --prefix attendance-system/mobile-app run lint",
+    "clean:generated": "node scripts/clean-generated.mjs"
+  },
+  "devDependencies": {
+    "concurrently": "^8.0.0"
+  }
+}

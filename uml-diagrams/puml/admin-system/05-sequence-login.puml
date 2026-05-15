@@ -1,0 +1,36 @@
+@startuml Login_Sequence
+skinparam theme cerulean-outline
+skinparam shadowing false
+skinparam defaultFontSize 14
+
+title BIỂU ĐỒ TRÌNH TỰ ĐĂNG NHẬP
+
+actor "Người dùng" as User
+participant "Hệ thống" as System
+database "Cơ sở dữ liệu" as DB
+participant "JWT Service" as JWT
+
+User -> System : Truy cập trang đăng nhập
+System --> User : Hiển thị form đăng nhập
+
+loop Nhập lại thông tin nếu sai
+  User -> System : Gửi Email & Mật khẩu
+  System -> DB : Tìm tài khoản theo email
+  DB --> System : Thông tin tài khoản
+
+  System -> System : Kiểm tra mật khẩu
+
+  alt Xác thực thất bại
+    System --> User : Hiển thị lỗi đăng nhập
+  else Xác thực thành công
+    System -> JWT : Tạo JWT Token
+    JWT --> System : Token
+    System -> DB : Cập nhật thời gian đăng nhập
+    DB --> System : OK
+    System --> User : Trả về token và thông tin phiên
+    System --> User : Chuyển hướng Dashboard
+    break
+  end
+end
+
+@enduml

@@ -1,0 +1,62 @@
+@startuml
+title Admin System Overview
+left to right direction
+skinparam shadowing false
+skinparam packageStyle rectangle
+
+actor "HR Admin / Manager" as Admin
+actor Employee
+
+rectangle "Admin System" {
+  usecase "Authentication" as UC_Auth
+  usecase "Employee Management" as UC_Employee
+  usecase "Leave Management" as UC_Leave
+  usecase "Attendance Tracking" as UC_Attendance
+  usecase "Payroll" as UC_Payroll
+  usecase "Device Management" as UC_Device
+  usecase "Dashboard & Reports" as UC_Report
+  usecase "System Settings" as UC_Settings
+}
+
+Admin --> UC_Auth
+Admin --> UC_Employee
+Admin --> UC_Leave
+Admin --> UC_Attendance
+Admin --> UC_Payroll
+Admin --> UC_Device
+Admin --> UC_Report
+Admin --> UC_Settings
+
+Employee --> UC_Leave
+Employee --> UC_Attendance
+Employee --> UC_Report
+
+note right of UC_Employee
+Detailed diagrams in:
+ - 03-usecase-employee-management.puml
+ - 04-activity-create-employee.puml
+ - 05-sequence-create-employee.puml
+end note
+
+note right of UC_Leave
+Detailed diagrams in:
+ - 03-usecase-leave-management.puml
+ - 04-activity-submit-leave-request.puml
+ - 05-sequence-submit-leave-request.puml
+end note
+
+note right of UC_Payroll
+Detailed diagrams in:
+ - 03-usecase-payroll-management.puml
+ - 04-activity-calculate-salary.puml
+ - 05-sequence-calculate-salary.puml
+end note
+
+note right of UC_Settings
+Detailed diagrams in:
+ - 03-usecase-system-settings.puml
+ - 04-activity-system-settings.puml
+ - 05-sequence-system-settings.puml
+end note
+
+@enduml

@@ -1,0 +1,120 @@
+@startuml
+title ER Diagram - Database Schema
+hide circle
+skinparam linetype ortho
+
+entity "USER" as USER {
+  * _id : ObjectId
+  --
+  email : string
+  password : string
+  role : string
+}
+
+entity "EMPLOYEE" as EMPLOYEE {
+  * _id : ObjectId
+  --
+  firstName : string
+  lastName : string
+  email : string
+  departmentId : ObjectId
+  positionId : ObjectId
+}
+
+entity "DEPARTMENT" as DEPARTMENT {
+  * _id : ObjectId
+  --
+  name : string
+  code : string
+  managerId : ObjectId
+}
+
+entity "POSITION" as POSITION {
+  * _id : ObjectId
+  --
+  title : string
+  level : string
+  salary : number
+}
+
+entity "ATTENDANCE" as ATTENDANCE {
+  * _id : ObjectId
+  --
+  employeeId : ObjectId
+  deviceId : ObjectId
+  date : date
+}
+
+entity "DEVICE" as DEVICE {
+  * _id : ObjectId
+  --
+  code : string
+  name : string
+  status : string
+}
+
+entity "FACE_RECORD" as FACE_RECORD {
+  * _id : ObjectId
+  --
+  employeeId : ObjectId
+  embeddings : vector[]
+}
+
+entity "FACE_LOG" as FACE_LOG {
+  * _id : ObjectId
+  --
+  employeeId : ObjectId
+  deviceId : ObjectId
+  quality : float
+}
+
+entity "LEAVE_TYPE" as LEAVE_TYPE {
+  * _id : ObjectId
+  --
+  name : string
+  code : string
+  maxDaysPerYear : int
+}
+
+entity "LEAVE_REQUEST" as LEAVE_REQUEST {
+  * _id : ObjectId
+  --
+  employeeId : ObjectId
+  leaveTypeId : ObjectId
+  status : string
+}
+
+entity "LEAVE_BALANCE" as LEAVE_BALANCE {
+  * _id : ObjectId
+  --
+  employeeId : ObjectId
+  leaveTypeId : ObjectId
+  year : int
+  remaining : int
+}
+
+entity "PAYROLL" as PAYROLL {
+  * _id : ObjectId
+  --
+  employeeId : ObjectId
+  month : int
+  year : int
+  netSalary : decimal
+}
+
+USER ||--o{ DEPARTMENT : manages
+DEPARTMENT ||--o{ EMPLOYEE : has
+POSITION ||--o{ EMPLOYEE : held_by
+EMPLOYEE ||--o{ ATTENDANCE : has
+DEVICE ||--o{ ATTENDANCE : records
+EMPLOYEE ||--o{ FACE_RECORD : has
+EMPLOYEE ||--o{ FACE_LOG : creates
+DEVICE ||--o{ FACE_LOG : captures
+LEAVE_TYPE ||--o{ LEAVE_REQUEST : categorizes
+EMPLOYEE ||--o{ LEAVE_REQUEST : submits
+LEAVE_TYPE ||--o{ LEAVE_BALANCE : tracks
+EMPLOYEE ||--o{ LEAVE_BALANCE : owns
+EMPLOYEE ||--o{ PAYROLL : receives
+USER ||--o{ PAYROLL : approves
+
+@enduml

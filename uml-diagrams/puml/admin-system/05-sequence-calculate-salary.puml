@@ -1,0 +1,34 @@
+@startuml
+title Sequence - Calculate Salary
+actor Admin as "HR Admin"
+boundary UI as "Admin UI"
+control API as "Admin API"
+entity PayrollService
+database DB as "Admin Database"
+
+Admin -> UI : Chọn tính lương
+UI -> API : Yêu cầu tính lương
+API -> DB : load employees
+DB --> API : employees
+API -> DB : load attendance and overtime
+DB --> API : payroll inputs
+
+loop each employee
+  API -> PayrollService : calculate salary
+  PayrollService -> PayrollService : compute gross salary
+  PayrollService -> PayrollService : compute deductions
+  PayrollService -> PayrollService : compute tax
+  PayrollService -> PayrollService : compute net salary
+  PayrollService --> API : salary result
+  API -> DB : save payroll record
+  DB --> API : OK
+end
+
+API --> UI : Trả bảng lương tổng hợp
+Admin -> UI : Xác nhận bảng lương
+UI -> API : PUT /payroll/:id/confirm
+API -> DB : update status confirmed
+DB --> API : OK
+API --> UI : Đã xác nhận
+
+@enduml

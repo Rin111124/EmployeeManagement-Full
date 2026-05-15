@@ -1,0 +1,24 @@
+@startuml
+title Use case chi tiet - Payroll Management
+left to right direction
+skinparam shadowing false
+skinparam packageStyle rectangle
+
+actor "HR Admin" as Admin
+actor Employee
+
+rectangle "Payroll Management" {
+  usecase "Calculate Salary" as UC_Calc
+  usecase "View Payslip" as UC_View
+  usecase "Export Salary" as UC_Export
+  usecase "Manage Deductions" as UC_Deduct
+  usecase "Generate Report" as UC_Report
+}
+
+Admin --> UC_Calc
+Admin --> UC_Export
+Admin --> UC_Deduct
+Admin --> UC_Report
+Employee --> UC_View
+
+@enduml

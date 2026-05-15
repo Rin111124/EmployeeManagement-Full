@@ -1,0 +1,57 @@
+@startuml
+title Xac dinh yeu cau va tac nhan
+left to right direction
+skinparam shadowing false
+skinparam packageStyle rectangle
+
+actor "HR Admin / Manager" as Admin
+actor Employee
+actor "Kiosk Terminal" as Kiosk
+actor "AI Service" as AI
+actor "Device Manager" as DeviceManager
+
+rectangle "Admin System" {
+  usecase "Authentication\n& Authorization" as UC_Auth
+  usecase "Employee Management" as UC_Employee
+  usecase "Attendance Management" as UC_Attendance
+  usecase "Leave Management" as UC_Leave
+  usecase "Payroll" as UC_Payroll
+  usecase "Dashboard & Reports" as UC_Report
+  usecase "System Settings" as UC_Settings
+  usecase "Device Management" as UC_Device
+}
+
+rectangle "Attendance System" {
+  usecase "Face Registration" as UC_FaceEnroll
+  usecase "Face Recognition" as UC_FaceRecog
+  usecase "Attendance Log" as UC_AttendanceLog
+  usecase "Data Sync" as UC_Sync
+}
+
+Admin --> UC_Auth
+Admin --> UC_Employee
+Admin --> UC_Attendance
+Admin --> UC_Leave
+Admin --> UC_Payroll
+Admin --> UC_Report
+Admin --> UC_Settings
+Admin --> UC_Device
+
+Employee --> UC_Attendance
+Employee --> UC_Leave
+Employee --> UC_Report
+
+Kiosk --> UC_FaceEnroll
+Kiosk --> UC_FaceRecog
+Kiosk --> UC_AttendanceLog
+Kiosk --> UC_Sync
+
+AI --> UC_FaceEnroll
+AI --> UC_FaceRecog
+
+DeviceManager --> UC_Device
+
+UC_Attendance ..> UC_FaceRecog : uses
+UC_FaceEnroll ..> UC_Sync : syncs
+
+@enduml

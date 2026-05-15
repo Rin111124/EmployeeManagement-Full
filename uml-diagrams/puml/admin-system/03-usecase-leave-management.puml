@@ -1,0 +1,27 @@
+@startuml
+title Use case chi tiet - Leave Management
+left to right direction
+skinparam shadowing false
+skinparam packageStyle rectangle
+
+actor Employee
+actor "HR Admin" as Admin
+
+rectangle "Leave Management" {
+  usecase "Submit Request" as UC_Submit
+  usecase "Approve Request" as UC_Approve
+  usecase "Reject Request" as UC_Reject
+  usecase "View Balance" as UC_Balance
+  usecase "View History" as UC_History
+  usecase "Configure Leave Types" as UC_Config
+}
+
+Employee --> UC_Submit
+Employee --> UC_Balance
+Employee --> UC_History
+Admin --> UC_Approve
+Admin --> UC_Reject
+Admin --> UC_Config
+Admin --> UC_History
+
+@enduml

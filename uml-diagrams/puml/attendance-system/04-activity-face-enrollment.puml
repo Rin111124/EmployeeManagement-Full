@@ -1,0 +1,37 @@
+@startuml
+title Activity - Face Enrollment
+skinparam theme cerulean-outline
+skinparam shadowing false
+skinparam ActivityFontSize 14
+
+|Người dùng|
+start
+
+:Chọn chức năng đăng ký khuôn mặt;
+
+|Hệ thống|
+:Hướng dẫn vị trí đứng trước camera;
+:Chụp mặt chính diện;
+
+if (Chất lượng ảnh tốt?) then (Không)
+  :Yêu cầu chụp lại;
+  |Người dùng|
+  :Đứng lại đúng vị trí;
+  stop
+else (Có)
+  :Chụp mặt góc trái;
+  :Chụp mặt góc phải;
+  if (Tất cả ảnh đạt yêu cầu?) then (Không)
+    :Yêu cầu chụp lại;
+    |Người dùng|
+    :Thực hiện lại quá trình;
+    stop
+  else (Có)
+    :Trích xuất embedding;
+    :Lưu dữ liệu khuôn mặt;
+    |Người dùng|
+    :Nhận thông báo đăng ký thành công;
+    stop
+  endif
+endif
+@enduml

@@ -1,0 +1,134 @@
+@startuml
+title Class Diagram
+skinparam shadowing false
+skinparam linetype ortho
+
+class User {
+  -id: ObjectId
+  -email: string
+  -password: string
+  -role: string
+  -status: string
+  +login()
+  +logout()
+}
+
+class Employee {
+  -id: ObjectId
+  -firstName: string
+  -lastName: string
+  -email: string
+  -phone: string
+  -departmentId: ObjectId
+  -positionId: ObjectId
+  -status: string
+  +getFullName()
+  +updateInfo()
+}
+
+class Department {
+  -id: ObjectId
+  -name: string
+  -code: string
+  -managerId: ObjectId
+}
+
+class Position {
+  -id: ObjectId
+  -title: string
+  -level: string
+  -salary: number
+}
+
+class Contract {
+  -id: ObjectId
+  -employeeId: ObjectId
+  -positionId: ObjectId
+  -startDate: Date
+  -endDate: Date
+  -status: string
+}
+
+class Attendance {
+  -id: ObjectId
+  -employeeId: ObjectId
+  -date: Date
+  -checkInTime: Date
+  -checkOutTime: Date
+  -deviceId: ObjectId
+}
+
+class Device {
+  -id: ObjectId
+  -code: string
+  -name: string
+  -location: string
+  -status: string
+}
+
+class FaceRecord {
+  -id: ObjectId
+  -employeeId: ObjectId
+  -embeddings: number[][]
+  -status: string
+}
+
+class FaceLog {
+  -id: ObjectId
+  -employeeId: ObjectId
+  -deviceId: ObjectId
+  -quality: number
+  -capturedAt: Date
+}
+
+class LeaveType {
+  -id: ObjectId
+  -name: string
+  -code: string
+  -maxDaysPerYear: number
+}
+
+class LeaveRequest {
+  -id: ObjectId
+  -employeeId: ObjectId
+  -leaveTypeId: ObjectId
+  -startDate: Date
+  -endDate: Date
+  -status: string
+}
+
+class LeaveBalance {
+  -id: ObjectId
+  -employeeId: ObjectId
+  -leaveTypeId: ObjectId
+  -year: number
+  -remaining: number
+}
+
+class Payroll {
+  -id: ObjectId
+  -employeeId: ObjectId
+  -month: number
+  -year: number
+  -netSalary: number
+  -status: string
+}
+
+User "1" -- "0..*" Department : manages
+Department "1" -- "0..*" Employee
+Employee "1" -- "0..*" Contract
+Employee "1" -- "0..*" Attendance
+Employee "1" -- "0..*" FaceRecord
+Employee "1" -- "0..*" FaceLog
+Employee "1" -- "0..*" LeaveRequest
+Employee "1" -- "0..*" LeaveBalance
+Employee "1" -- "0..*" Payroll
+Employee "1" -- "1" Department
+Employee "1" -- "1" Position
+Attendance "0..*" -- "1" Device
+FaceLog "0..*" -- "1" Device
+LeaveRequest "0..*" -- "1" LeaveType
+LeaveBalance "0..*" -- "1" LeaveType
+Payroll "0..*" -- "1" User : approvedBy
+
+@enduml

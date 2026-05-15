@@ -1,0 +1,39 @@
+@startuml
+title Activity - Calculate Salary
+skinparam theme cerulean-outline
+skinparam shadowing false
+skinparam ActivityFontSize 14
+
+|Người dùng|
+start
+
+:Chọn tháng và năm cần tính lương;
+
+|Hệ thống|
+:Tải dữ liệu nhân viên và chấm công;
+:Tính lương cơ bản;
+:Tính phụ cấp và tăng ca;
+:Tính khấu trừ và thuế;
+:Tổng hợp bảng lương;
+
+if (Có dữ liệu bất thường?) then (Có)
+  :Hiển thị cảnh báo cần kiểm tra;
+  |Người dùng|
+  :Xem và xử lý dữ liệu bất thường;
+  |Hệ thống|
+endif
+
+|Người dùng|
+:Xem tổng hợp bảng lương;
+
+if (Xác nhận tính lương?) then (Không)
+  stop
+else (Có)
+  |Hệ thống|
+  :Lưu bảng lương;
+  :Thông báo nhân viên;
+  |Người dùng|
+  :Nhận kết quả hoàn tất;
+  stop
+endif
+@enduml

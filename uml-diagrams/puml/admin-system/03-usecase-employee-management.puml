@@ -1,0 +1,31 @@
+@startuml
+title Use case chi tiet - Employee Management
+left to right direction
+skinparam shadowing false
+skinparam packageStyle rectangle
+
+actor "HR Admin" as Admin
+actor Employee
+
+rectangle "Employee Management" {
+  usecase "Create Employee" as UC_Create
+  usecase "Read Employee Info" as UC_Read
+  usecase "Update Employee" as UC_Update
+  usecase "Delete Employee" as UC_Delete
+  usecase "Assign Position" as UC_Assign
+  usecase "Manage Department" as UC_Department
+  usecase "View Employee List" as UC_List
+}
+
+Admin --> UC_Create
+Admin --> UC_Read
+Admin --> UC_Update
+Admin --> UC_Delete
+Admin --> UC_Assign
+Admin --> UC_Department
+Admin --> UC_List
+
+Employee --> UC_Read
+Employee --> UC_List
+
+@enduml

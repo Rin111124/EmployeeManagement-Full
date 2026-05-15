@@ -1,0 +1,31 @@
+@startuml
+title Activity - Submit Leave Request
+skinparam theme cerulean-outline
+skinparam shadowing false
+skinparam ActivityFontSize 14
+
+|Người dùng|
+start
+
+:Mở form xin phép;
+:Chọn loại phép;
+:Chọn ngày bắt đầu và kết thúc;
+:Nhập lý do;
+
+|Hệ thống|
+:Kiểm tra ngày hợp lệ;
+:Kiểm tra số dư phép;
+
+if (Đủ phép?) then (Không)
+  :Hiển thị thông báo không đủ số phép;
+  |Người dùng|
+  :Điều chỉnh hoặc hủy yêu cầu;
+  stop
+else (Có)
+  :Tạo đơn xin phép ở trạng thái chờ duyệt;
+  :Thông báo cho quản trị;
+  |Người dùng|
+  :Nhận thông báo gửi đơn thành công;
+  stop
+endif
+@enduml

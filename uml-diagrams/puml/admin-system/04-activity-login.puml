@@ -1,0 +1,34 @@
+@startuml Login_Activity
+skinparam theme cerulean-outline
+skinparam shadowing false
+skinparam ActivityFontSize 14
+
+title BIỂU ĐỒ HOẠT ĐỘNG ĐĂNG NHẬP
+
+|Người dùng|
+start
+
+:Truy cập trang đăng nhập;
+
+repeat
+    |Người dùng|
+    :Nhập Email & Mật khẩu;
+    |Hệ thống|
+    :Xác thực tài khoản;
+    
+    if (Xác thực thành công?) then (Không)
+        :Hiển thị lỗi đăng nhập;
+        |Người dùng|
+    else (Có)
+        |Hệ thống|
+        :Tạo JWT Token;
+        :Khởi tạo phiên làm việc;
+        |Người dùng|
+        :Truy cập Dashboard;
+        stop
+    endif
+    
+backward:Nhập lại thông tin;
+repeat while (Tiếp tục?)
+
+@enduml

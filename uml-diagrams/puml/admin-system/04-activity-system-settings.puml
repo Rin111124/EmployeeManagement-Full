@@ -1,0 +1,38 @@
+@startuml
+title Activity - System Settings
+skinparam theme cerulean-outline
+skinparam shadowing false
+skinparam ActivityFontSize 14
+
+|Người dùng|
+start
+
+:Mở module cấu hình hệ thống;
+:Chọn thao tác cần thực hiện;
+
+|Hệ thống|
+if (Cập nhật ca làm việc?) then (Có)
+  :Hiển thị form cấu hình ca;
+  |Người dùng|
+  :Nhập thông tin ca làm việc;
+  |Hệ thống|
+  :Lưu cấu hình ca;
+elseif (Quản lý thiết bị?) then (Có)
+  :Hiển thị danh sách thiết bị;
+  |Người dùng|
+  :Thêm hoặc cập nhật thiết bị;
+  |Hệ thống|
+  :Lưu thay đổi thiết bị;
+elseif (Xem audit log?) then (Có)
+  :Hiển thị nhật ký hệ thống;
+  |Người dùng|
+  :Lọc hoặc xem chi tiết nhật ký;
+else (Sao lưu dữ liệu)
+  :Tạo tác vụ sao lưu;
+  |Người dùng|
+  :Theo dõi trạng thái sao lưu;
+endif
+
+|Người dùng|
+stop
+@enduml

@@ -1,0 +1,53 @@
+@startuml
+title Deployment Diagram
+skinparam shadowing false
+skinparam linetype ortho
+
+node "Client Layer" {
+  artifact "Web Browser" as Web
+  artifact "Mobile App" as Mobile
+  artifact "Kiosk Terminal" as Kiosk
+}
+
+cloud "Cloud / Network" {
+  node "Load Balancer" as LB
+
+  node "Admin Services" {
+    artifact "Admin API\n(Node.js/Express)" as AdminAPI
+    database "MongoDB\n(Admin DB)" as AdminDB
+    artifact "Redis Cache" as Cache
+  }
+
+  node "Attendance Services" {
+    artifact "Attendance API\n(Node.js)" as AttAPI
+    database "MongoDB\n(Attendance DB)" as AttDB
+    artifact "AI Service\n(FastAPI/Python)" as AIService
+    artifact "File Storage" as FileStorage
+  }
+
+  node "External Services" {
+    artifact "Email Service" as Email
+    artifact "SMS API" as SMS
+    artifact "Cloud Storage" as Storage
+  }
+}
+
+Web --> LB : HTTP/HTTPS
+Mobile --> LB : HTTP/HTTPS
+Kiosk --> LB : HTTP/HTTPS
+
+LB --> AdminAPI : /api/v1
+LB --> AttAPI : /attendance
+LB --> AIService : /ai
+
+AdminAPI --> AdminDB : query/update
+AdminAPI --> Cache : cache
+AttAPI --> AttDB : query/update
+AttAPI --> AIService : recognition
+AIService --> FileStorage : store
+AdminAPI --> Email : notifications
+AdminAPI --> SMS : notifications
+AdminDB --> Storage : backup
+FileStorage --> Storage : sync
+
+@enduml

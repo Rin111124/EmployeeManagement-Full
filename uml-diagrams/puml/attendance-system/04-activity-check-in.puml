@@ -1,0 +1,40 @@
+@startuml
+title Activity - Check In
+skinparam theme cerulean-outline
+skinparam shadowing false
+skinparam ActivityFontSize 14
+
+|Người dùng|
+start
+
+:Đứng trước kiosk;
+:Yêu cầu chấm công vào;
+
+|Hệ thống|
+:Quét khuôn mặt;
+:Gửi ảnh sang AI Service;
+:Trích xuất đặc trưng khuôn mặt;
+:So khớp với dữ liệu đã lưu;
+
+if (Nhận diện thành công?) then (Không)
+  :Hiển thị yêu cầu quét lại hoặc nhập mã thủ công;
+  |Người dùng|
+  :Thực hiện lại thao tác;
+  stop
+else (Có)
+  :Kiểm tra trạng thái check-in hôm nay;
+  if (Đã check-in?) then (Có)
+    :Thông báo đã chấm công rồi;
+    |Người dùng|
+    :Xác nhận thông báo;
+    stop
+  else (Không)
+    :Tạo bản ghi chấm công;
+    :Lưu vào cơ sở dữ liệu;
+    :Đồng bộ lên hệ thống quản trị;
+    |Người dùng|
+    :Nhận thông báo chấm công thành công;
+    stop
+  endif
+endif
+@enduml

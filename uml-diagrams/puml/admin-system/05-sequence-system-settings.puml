@@ -1,0 +1,31 @@
+@startuml
+title Sequence - System Settings
+actor Admin as "HR Admin"
+boundary UI as "Admin UI"
+control API as "Admin API"
+database DB as "Admin Database"
+
+Admin -> UI : Mở cấu hình hệ thống
+UI -> API : GET /settings
+API -> DB : load settings
+DB --> API : settings
+API --> UI : Hiển thị cấu hình hiện tại
+
+alt Update shifts
+  Admin -> UI : Cập nhật ca làm việc
+  UI -> API : PUT /shifts
+  API -> DB : update shift rules
+  DB --> API : OK
+else Manage devices
+  Admin -> UI : Thêm hoặc sửa thiết bị
+  UI -> API : PATCH /devices/:id
+  API -> DB : update device
+  DB --> API : OK
+else Backup data
+  Admin -> UI : Yêu cầu sao lưu dữ liệu
+  UI -> API : POST /backup
+  API -> DB : start backup job
+  DB --> API : queued
+end
+
+@enduml

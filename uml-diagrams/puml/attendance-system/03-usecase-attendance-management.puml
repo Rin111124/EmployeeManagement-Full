@@ -1,0 +1,28 @@
+@startuml
+title Use case chi tiet - Attendance Management
+left to right direction
+skinparam shadowing false
+skinparam packageStyle rectangle
+
+actor Employee
+actor "Kiosk Terminal" as Kiosk
+actor "HR Admin" as Admin
+
+rectangle "Attendance Management" {
+  usecase "Check In" as UC_CheckIn
+  usecase "Check Out" as UC_CheckOut
+  usecase "View Attendance" as UC_View
+  usecase "View Report" as UC_Report
+  usecase "Export Attendance" as UC_Export
+  usecase "Mark Manual" as UC_Manual
+}
+
+Kiosk --> UC_CheckIn
+Kiosk --> UC_CheckOut
+Employee --> UC_View
+Admin --> UC_View
+Admin --> UC_Report
+Admin --> UC_Export
+Admin --> UC_Manual
+
+@enduml

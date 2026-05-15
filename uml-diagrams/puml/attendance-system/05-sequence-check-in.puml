@@ -1,0 +1,34 @@
+@startuml
+title Sequence - Check In
+actor Employee
+boundary Kiosk
+control AttService as "Attendance Service"
+control AIService as "AI Service"
+database AdminDB as "Admin Database"
+
+Employee -> Kiosk : Đứng trước camera và yêu cầu chấm công
+Kiosk -> Kiosk : Capture face image
+Kiosk -> AIService : POST /recognize (image)
+AIService -> AIService : Extract embedding
+AIService -> AdminDB : Search matching employee
+AdminDB --> AIService : embeddings
+AIService --> Kiosk : employee id / not found
+
+alt Employee not found
+  Kiosk --> Employee : Yêu cầu quét lại hoặc nhập mã thủ công
+else Employee found
+  Kiosk -> AttService : POST /check-in
+  AttService -> AdminDB : verify today's attendance
+  AdminDB --> AttService : status
+  alt Already checked in
+    AttService --> Kiosk : duplicate check-in message
+    Kiosk --> Employee : Hiển thị đã chấm công rồi
+  else First check-in
+    AttService -> AdminDB : create attendance record
+    AdminDB --> AttService : OK
+    AttService --> Kiosk : success
+    Kiosk --> Employee : Hiển thị chấm công thành công
+  end
+end
+
+@enduml

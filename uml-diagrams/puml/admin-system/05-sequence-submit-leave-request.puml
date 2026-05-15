@@ -1,0 +1,32 @@
+@startuml
+title Sequence - Submit Leave Request
+actor Employee
+boundary UI as "Admin UI"
+control API as "Admin API"
+database DB as "Admin Database"
+actor Admin as "HR Admin"
+
+Employee -> UI : Mở form xin phép
+UI -> API : Gửi yêu cầu nghỉ phép
+API -> DB : check leave balance
+DB --> API : balance
+
+alt Not enough balance
+  API --> UI : Từ chối do không đủ số phép
+  UI --> Employee : Hiển thị thông báo lỗi
+else Enough balance
+  API -> DB : create pending leave request
+  DB --> API : created
+  API --> UI : Thông báo gửi đơn thành công
+  UI --> Employee : Hiển thị trạng thái chờ duyệt
+  API --> Admin : Thông báo có đơn xin phép mới
+  Admin -> UI : Xem và duyệt đơn
+  UI -> API : PUT /leave-requests/:id/approve
+  API -> DB : update status approved
+  DB --> API : OK
+  API -> DB : update leave balance
+  DB --> API : OK
+  API --> UI : Đã duyệt
+end
+
+@enduml

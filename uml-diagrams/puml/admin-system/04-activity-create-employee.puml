@@ -1,0 +1,30 @@
+@startuml
+title Activity - Create Employee
+skinparam theme cerulean-outline
+skinparam shadowing false
+skinparam ActivityFontSize 14
+
+|Người dùng|
+start
+
+:Mở form thêm nhân viên;
+:Nhập thông tin cá nhân;
+:Chọn phòng ban và chức vụ;
+:Nhập thông tin hợp đồng;
+
+|Hệ thống|
+:Kiểm tra dữ liệu đầu vào;
+
+if (Email đã tồn tại?) then (Có)
+  :Hiển thị lỗi xác thực;
+  |Người dùng|
+  :Cập nhật lại thông tin;
+  stop
+else (Không)
+  :Lưu hồ sơ nhân viên;
+  :Gửi email chào mừng;
+  |Người dùng|
+  :Nhận thông báo tạo thành công;
+  stop
+endif
+@enduml

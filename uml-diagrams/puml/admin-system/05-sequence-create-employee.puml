@@ -1,0 +1,29 @@
+@startuml
+title Sequence - Create Employee
+actor Admin as "HR Admin"
+boundary UI as "Admin UI"
+control API as "Admin API"
+entity EmployeeService
+database DB as "Admin Database"
+participant Mail as "Email Service"
+
+Admin -> UI : Mở form thêm nhân viên
+UI -> API : Gửi dữ liệu nhân viên
+API -> EmployeeService : validate payload
+EmployeeService -> DB : check duplicate email
+DB --> EmployeeService : result
+
+alt Email exists
+  EmployeeService --> API : validation error
+  API --> UI : Hiển thị lỗi email đã tồn tại
+else Valid
+  EmployeeService -> DB : create employee
+  DB --> EmployeeService : created
+  EmployeeService -> Mail : send welcome email
+  Mail --> EmployeeService : sent
+  EmployeeService --> API : success
+  API --> UI : Trả kết quả tạo thành công
+  UI --> Admin : Hiển thị thông báo thành công
+end
+
+@enduml
