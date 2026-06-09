@@ -1,0 +1,23 @@
+{
+  "expo": {
+    "name": "IndustrialHR Employee",
+    "slug": "industrialhr-employee",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "industrialhremployee",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "android": {
+      "package": "com.employeemanagement.employee",
+      "usesCleartextTraffic": true,
+      "edgeToEdgeEnabled": true,
+      "predictiveBackGestureEnabled": false
+    },
+    "ios": {
+      "supportsTablet": true
+    },
+    "plugins": [
+      "expo-router"
+    ]
+  }
+}

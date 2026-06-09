@@ -97,6 +97,14 @@ npm run clean:generated
 ```
 
 ## Documentation
+## 🛠️ Testing & Diagnostics
+
+Hệ thống đi kèm với bộ công cụ kiểm thử và chẩn đoán toàn diện. Xem chi tiết tại [Hướng dẫn chạy Scripts Test](docs/testing-guide.md).
+
+Các lệnh nhanh:
+- `npm test` (trong `admin-system/backend`): Chạy unit tests.
+- `npm run security:test`: Kiểm tra an ninh.
+- `node scripts/recalculateAllAttendance.js`: Cập nhật lại giờ làm việc theo cấu hình nghỉ mới.
 
 - Documentation index: [docs/README.md](docs/README.md)
 - Admin backend: [admin-system/backend/README.md](admin-system/backend/README.md)
