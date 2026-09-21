@@ -7,6 +7,17 @@ node_modules/
 !.env.example
 !.env.docker.example
 
+# Secret vaults & key files — never commit these
+secrets/
+*.pem
+*.key
+*.p12
+*.pfx
+*.cert
+serviceAccountKey.json
+*credentials*.json
+
+
 # Logs
 *.log
 npm-debug.log*

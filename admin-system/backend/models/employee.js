@@ -24,6 +24,7 @@ const employeeSchema = new Schema(
         gender: {
             type: String,
             required: true,
+            enum: ['Male', 'Female', 'Other'],
             trim: true,
         },
         place_of_birth: {
@@ -47,11 +48,19 @@ const employeeSchema = new Schema(
             phone: {
                 type: String,
                 trim: true,
+                validate: {
+                    validator: (v) => !v || /^(\+84|0)[3-9]\d{8}$/.test(v),
+                    message: 'Invalid Vietnamese phone number',
+                },
             },
             email: {
                 type: String,
                 trim: true,
                 lowercase: true,
+                validate: {
+                    validator: (v) => !v || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v),
+                    message: 'Invalid email format',
+                },
             },
             permanent_address: {
                 type: String,

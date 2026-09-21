@@ -112,13 +112,26 @@ export default function MyPortal() {
 
     const { data: employeeResponse, isLoading: loadingEmployee } = useEmployee(employeeId);
     const employee = employeeResponse?.data || employeeResponse || user?.employee_id || null;
-    const { data: attendance = [] } = useAttendanceHistory({ employee_id: employeeId, from: monthStart, to: monthEnd, limit: 100 });
-    const { data: payroll = [] } = usePayrollList({ employee_id: employeeId, limit: 12 });
-    const { data: contracts = [] } = useEmployeeContracts(employeeId);
-    const { data: assets = [] } = useEmployeeAssets(employeeId);
-    const { data: leaveRequests = [] } = useLeaveRequests({ employee_id: employeeId, limit: 20 });
-    const { data: overtimeRequests = [] } = useOvertimeRequests({ employee_id: employeeId, limit: 20 });
-    const { data: assignments = [] } = useShiftAssignments({ employee_id: employeeId, from: monthStart, to: monthEnd, limit: 100 });
+    const { data: attendanceRes } = useAttendanceHistory({ employee_id: employeeId, from: monthStart, to: monthEnd, limit: 100 });
+    const attendance: any[] = Array.isArray(attendanceRes) ? attendanceRes : ((attendanceRes as any)?.items || []);
+
+    const { data: payrollRes } = usePayrollList({ employee_id: employeeId, limit: 12 });
+    const payroll: any[] = Array.isArray(payrollRes) ? payrollRes : ((payrollRes as any)?.items || []);
+
+    const { data: contractsRes } = useEmployeeContracts(employeeId);
+    const contracts: any[] = Array.isArray(contractsRes) ? contractsRes : ((contractsRes as any)?.items || []);
+
+    const { data: assetsRes } = useEmployeeAssets(employeeId);
+    const assets: any[] = Array.isArray(assetsRes) ? assetsRes : ((assetsRes as any)?.items || []);
+
+    const { data: leaveRequestsRes } = useLeaveRequests({ employee_id: employeeId, limit: 20 });
+    const leaveRequests: any[] = Array.isArray(leaveRequestsRes) ? leaveRequestsRes : ((leaveRequestsRes as any)?.items || []);
+
+    const { data: overtimeRequestsRes } = useOvertimeRequests({ employee_id: employeeId, limit: 20 });
+    const overtimeRequests: any[] = Array.isArray(overtimeRequestsRes) ? overtimeRequestsRes : ((overtimeRequestsRes as any)?.items || []);
+
+    const { data: assignmentsRes } = useShiftAssignments({ employee_id: employeeId, from: monthStart, to: monthEnd, limit: 100 });
+    const assignments: any[] = Array.isArray(assignmentsRes) ? assignmentsRes : ((assignmentsRes as any)?.items || []);
 
     const [leaveForm, setLeaveForm] = useState({
         type: 'Annual',

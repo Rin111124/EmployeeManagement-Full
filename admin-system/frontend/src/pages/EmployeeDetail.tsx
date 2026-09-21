@@ -158,7 +158,8 @@ function AssetsTab({ employeeId, t, dateLocale }: { employeeId: string, t: any, 
 
 // ─── Overtime Tab ─────────────────────────────────────────────────────────────
 function OvertimeTab({ employeeId, t, dateLocale }: { employeeId: string, t: any, dateLocale: string }) {
-    const { data: requests = [], isLoading, isError } = useOvertimeRequests({ employee_id: employeeId });
+    const { data: rawRequests, isLoading, isError } = useOvertimeRequests({ employee_id: employeeId });
+    const requests: any[] = Array.isArray(rawRequests) ? rawRequests : (rawRequests?.items || []);
 
     if (isLoading) return <TabLoader />;
     if (isError) return <TabError message={t('employees:error_load_detail')} />;
@@ -289,10 +290,11 @@ function AttendanceTab({ employeeId, setCheckoutRecord, t, dateLocale }: { emplo
 
 // ─── Payroll Tab ──────────────────────────────────────────────────────────────
 function PayrollTab({ employeeId, t, dateLocale }: { employeeId: string, t: any, dateLocale: string }) {
-    const { data: records = [], isLoading, isError } = usePayrollList({
+    const { data: rawRecords, isLoading, isError } = usePayrollList({
         employee_id: employeeId,
         limit: 24,
     });
+    const records: any[] = Array.isArray(rawRecords) ? rawRecords : (rawRecords?.items || []);
 
     if (isLoading) return <TabLoader />;
     if (isError) return <TabError message={t('employees:error_load_detail')} />;

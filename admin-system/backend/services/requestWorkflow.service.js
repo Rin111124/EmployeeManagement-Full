@@ -25,6 +25,24 @@ function getResource(type) {
 
 async function createOwn(type, employeeId, payload) {
     const { Model, populate } = getResource(type);
+
+    // Business rule: prevent overlapping leave requests
+    if (type === 'leave' && payload.start_date && payload.end_date) {
+        const overlapping = await Model.findOne({
+            employee_id: employeeId,
+            status: { $in: [REQUEST_STATUS.PENDING, REQUEST_STATUS.APPROVED] },
+            start_date: { $lte: new Date(payload.end_date) },
+            end_date: { $gte: new Date(payload.start_date) },
+        });
+
+        if (overlapping) {
+            throw new AppError(
+                `You already have a ${overlapping.status.toLowerCase()} leave request overlapping with these dates`,
+                409
+            );
+        }
+    }
+
     const document = await Model.create({
         ...payload,
         employee_id: employeeId,

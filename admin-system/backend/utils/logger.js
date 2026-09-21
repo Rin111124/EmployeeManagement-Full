@@ -1,10 +1,19 @@
 const env = require('../config/env');
 
-function log(level, message, meta) {
+/**
+ * Core log function.
+ *
+ * @param {string} level   - 'info' | 'warn' | 'error' | 'debug'
+ * @param {string} message - Human-readable message
+ * @param {object} [meta]  - Structured metadata
+ * @param {string} [requestId] - Optional request ID for end-to-end tracing (req.requestId)
+ */
+function log(level, message, meta, requestId) {
     const payload = {
         level,
         message,
         timestamp: new Date().toISOString(),
+        ...(requestId ? { requestId } : {}),
         ...(meta ? { meta } : {}),
     };
 
@@ -26,16 +35,17 @@ function log(level, message, meta) {
 }
 
 module.exports = {
-    error(message, meta) {
-        log('error', message, meta);
+    error(message, meta, requestId) {
+        log('error', message, meta, requestId);
     },
-    info(message, meta) {
-        log('info', message, meta);
+    info(message, meta, requestId) {
+        log('info', message, meta, requestId);
     },
-    warn(message, meta) {
-        log('warn', message, meta);
+    warn(message, meta, requestId) {
+        log('warn', message, meta, requestId);
     },
-    debug(message, meta) {
-        log('debug', message, meta);
+    debug(message, meta, requestId) {
+        log('debug', message, meta, requestId);
     },
 };
+

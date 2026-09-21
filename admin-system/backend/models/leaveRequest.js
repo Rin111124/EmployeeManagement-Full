@@ -60,4 +60,11 @@ const leaveRequestSchema = new Schema(
     }
 );
 
+leaveRequestSchema.index({ status: 1, employee_id: 1 });
+leaveRequestSchema.index({ start_date: 1, end_date: 1 });
+leaveRequestSchema.index(
+    { employee_id: 1, start_date: 1, end_date: 1, status: 1 },
+    { name: 'leave_overlap_lookup' }
+);
+
 module.exports = mongoose.models.LeaveRequest || mongoose.model('LeaveRequest', leaveRequestSchema);

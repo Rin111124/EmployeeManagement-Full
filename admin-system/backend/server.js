@@ -1,3 +1,7 @@
+// Sentry MUST be initialized before any other require so it can instrument
+// Node.js modules (http, mongoose, etc.) via require hooks.
+require('./config/sentry').init();
+
 const app = require('./app');
 const connectDatabase = require('./loaders/database.loader');
 const env = require('./config/env');
@@ -46,6 +50,16 @@ async function bootstrap() {
             console.log(`⚡ WebSocket: Bật (socket.io)`);
             console.log('='.repeat(50) + '\n');
         });
+
+        // 5. Khởi động BullMQ workers (graceful — không crash nếu Redis unavailable)
+        try {
+            require('./workers/payroll.worker');
+            logger.info('Payroll worker started');
+        } catch (err) {
+            logger.warn('Payroll worker could not start (Redis may not be running)', {
+                error: err.message,
+            });
+        }
 
     } catch (error) {
         logger.error('CRITICAL: Failed to bootstrap server', { 

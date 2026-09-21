@@ -59,6 +59,8 @@ const env = {
     geminiModel: process.env.GEMINI_MODEL || 'gemini-2.5-pro',
     openaiApiKey: process.env.OPENAI_API_KEY || '',
     openaiModel: process.env.OPENAI_MODEL || 'gpt-5.2',
+    redisUrl: process.env.REDIS_URL || 'redis://localhost:6379',
+    sentryDsn: process.env.SENTRY_DSN || '',
 };
 
 module.exports = env;

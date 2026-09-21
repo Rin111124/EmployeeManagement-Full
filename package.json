@@ -12,7 +12,8 @@
     "build:admin-frontend": "npm --prefix admin-system/frontend run build",
     "lint:admin-frontend": "npm --prefix admin-system/frontend run lint",
     "lint:mobile": "npm --prefix attendance-system/mobile-app run lint",
-    "clean:generated": "node scripts/clean-generated.mjs"
+    "clean:generated": "node scripts/clean-generated.mjs",
+    "prepare": "husky install || exit 0"
   },
   "devDependencies": {
     "concurrently": "^8.0.0"

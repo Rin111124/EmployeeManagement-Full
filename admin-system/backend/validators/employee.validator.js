@@ -18,7 +18,7 @@ const employeeBody = {
     employee_code: Joi.string().trim().uppercase().required(),
     full_name: Joi.string().trim().required(),
     date_of_birth: Joi.date().required(),
-    gender: Joi.string().trim().required(),
+    gender: Joi.string().trim().valid('Male', 'Female', 'Other').required(),
     place_of_birth: Joi.string().trim().allow('', null),
     identity: Joi.object({
         number: Joi.string().trim().allow('', null),
@@ -26,7 +26,9 @@ const employeeBody = {
         issue_place: Joi.string().trim().allow('', null),
     }).default({}),
     contact: Joi.object({
-        phone: Joi.string().trim().allow('', null),
+        phone: Joi.string().trim().pattern(/^(\+84|0)[3-9]\d{8}$/).allow('', null).messages({
+            'string.pattern.base': 'Invalid Vietnamese phone number',
+        }),
         email: Joi.string().email().trim().lowercase().allow('', null),
         permanent_address: Joi.string().trim().allow('', null),
         current_address: Joi.string().trim().allow('', null),

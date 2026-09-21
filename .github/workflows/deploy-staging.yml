@@ -1,0 +1,62 @@
+name: Deploy to Staging
+
+on:
+  push:
+    branches:
+      - develop
+      - staging
+  workflow_dispatch:
+
+concurrency:
+  group: staging-deployment
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Validate Staging Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            admin-system/backend/package-lock.json
+            admin-system/frontend/package-lock.json
+
+      - name: Backend Tests & Coverage
+        working-directory: admin-system/backend
+        run: |
+          npm ci
+          npm run test:coverage
+
+      - name: Frontend Typecheck & Build
+        working-directory: admin-system/frontend
+        run: |
+          npm ci
+          npm run lint
+          npm run build
+
+  deploy:
+    name: Deploy to Staging Server
+    needs: validate
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Configure Staging Environment
+        run: |
+          echo "Staging deployment triggered for commit ${{ github.sha }} on ${{ github.ref_name }}"
+          # When staging SSH secrets are configured, execute remote update:
+          # ssh ${{ secrets.STAGING_SSH_USER }}@${{ secrets.STAGING_HOST }} 'cd /opt/employee-management && git pull origin develop && docker compose -f docker-compose.staging.yml up -d --build'
+
+      - name: Notify Staging Deployment Status
+        if: always()
+        run: |
+          echo "Staging pipeline status: ${{ job.status }}"

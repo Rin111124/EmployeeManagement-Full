@@ -77,9 +77,12 @@ The API runs on `http://localhost:5000` by default.
 Health check:
 
 ```text
-GET /health
-GET /health/ready
+GET /health         → Liveness probe  (always 200 OK if process is running)
+GET /health/ready   → Readiness probe (200 if MongoDB connected, 503 otherwise)
 ```
+
+> **Note**: These endpoints are intentionally mounted at `/health` (not `/api/v1/health`) following
+> Kubernetes liveness/readiness probe conventions. Do not confuse them with the `/api/v1/` namespace.
 
 ## Security Test Scripts
 
