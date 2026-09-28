@@ -1,9 +1,29 @@
 import React from 'react';
-import { StyleSheet, View, Text } from 'react-native';
-import { Theme } from '../../theme/theme';
+import { StyleSheet, View, Text, TouchableOpacity } from 'react-native';
+import { Theme, Glows } from '../../theme/theme';
 
-export default function Footer({ info }) {
+export default function Footer({ info, connectionStatus = 'connected', onRetryConnection }) {
   const isError = info.status === 'ERROR';
+  const isConnected = connectionStatus === 'connected';
+  const isConnecting = connectionStatus === 'connecting';
+
+  const serverColor = isConnected 
+    ? Theme.colors.green.container 
+    : isConnecting 
+      ? Theme.colors.amber.container 
+      : Theme.colors.red.tertiary;
+
+  const serverGlow = isConnected 
+    ? Glows.green 
+    : isConnecting 
+      ? Glows.amber 
+      : Glows.red;
+
+  const serverText = isConnected
+    ? `ONLINE (${info.ip || 'LAN'})`
+    : isConnecting
+      ? `ĐANG KẾT NỐI...`
+      : `OFFLINE (CHẠM ĐỂ THỬ LẠI)`;
 
   return (
     <View style={styles.footer}>
@@ -13,6 +33,20 @@ export default function Footer({ info }) {
             {info.status}
           </Text>
         </Text>
+
+        <TouchableOpacity 
+          onPress={onRetryConnection} 
+          disabled={isConnected} 
+          activeOpacity={0.7}
+          style={styles.serverStatusTouchable}
+        >
+          <Text style={styles.label}>
+            SERVER:{' '}
+            <Text style={[styles.value, { color: serverColor }, serverGlow]}>
+              {serverText}
+            </Text>
+          </Text>
+        </TouchableOpacity>
       </View>
       <View style={styles.bottomRow}>
         <Text style={styles.infoItem}>ID: {info.id}</Text>
@@ -40,6 +74,12 @@ const styles = StyleSheet.create({
   },
   topRow: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  serverStatusTouchable: {
+    paddingVertical: 2,
+    paddingHorizontal: 4,
   },
   label: {
     color: '#94A3B8',

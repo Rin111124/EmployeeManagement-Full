@@ -51,12 +51,19 @@ async function bootstrap() {
             console.log('='.repeat(50) + '\n');
         });
 
-        // 5. Khởi động BullMQ workers (graceful — không crash nếu Redis unavailable)
+        // 5. Khởi động BullMQ workers (graceful — chỉ start nếu Redis sẵn sàng)
         try {
-            require('./workers/payroll.worker');
-            logger.info('Payroll worker started');
+            const { isRedisAvailable } = require('./config/redis');
+            const redisOnline = await isRedisAvailable();
+            if (redisOnline) {
+                const { startPayrollWorker } = require('./workers/payroll.worker');
+                startPayrollWorker();
+                logger.info('Payroll worker started');
+            } else {
+                logger.warn('Redis is offline or not configured — Payroll background worker is disabled. (Bulk background jobs require Redis).');
+            }
         } catch (err) {
-            logger.warn('Payroll worker could not start (Redis may not be running)', {
+            logger.warn('Payroll worker could not start', {
                 error: err.message,
             });
         }

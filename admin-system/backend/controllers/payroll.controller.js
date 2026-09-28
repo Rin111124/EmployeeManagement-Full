@@ -36,10 +36,10 @@ const generatePayroll = asyncHandler(async (req, res) => {
  * Body: { employeeIds: string[], month: number, year: number, finalize?: boolean, deduction?: number }
  */
 const generateBulkPayroll = asyncHandler(async (req, res) => {
-    // Lazy-require để không crash khi Redis chưa available
     let payrollQueue;
     try {
-        payrollQueue = require('../queues/payroll.queue');
+        const { getPayrollQueue } = require('../queues/payroll.queue');
+        payrollQueue = await getPayrollQueue();
     } catch (err) {
         logger.warn('BullMQ queue unavailable — Redis may not be running', { error: err.message });
         return res.status(503).json({
@@ -93,17 +93,19 @@ const generateBulkPayroll = asyncHandler(async (req, res) => {
  * Returns: { state, progress, result, failedReason }
  */
 const getJobStatus = asyncHandler(async (req, res) => {
+    const { jobId } = req.params;
+
     let payrollQueue;
     try {
-        payrollQueue = require('../queues/payroll.queue');
+        const { getPayrollQueue } = require('../queues/payroll.queue');
+        payrollQueue = await getPayrollQueue();
     } catch (err) {
         return res.status(503).json({
             success: false,
-            message: 'Job status service unavailable. Please ensure Redis is running.',
+            message: 'Bulk payroll service unavailable. Please ensure Redis is running.',
         });
     }
 
-    const { jobId } = req.params;
     const job = await payrollQueue.getJob(jobId);
 
     if (!job) {

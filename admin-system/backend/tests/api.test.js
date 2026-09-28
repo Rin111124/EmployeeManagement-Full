@@ -82,7 +82,7 @@ test.before(async () => {
         .send({ username: 'admin', password: 'secret123' })
         .expect(200);
 
-    adminToken = login.body.data.token;
+    adminToken = login.body.data.access_token;
 });
 
 test.after(async () => {
@@ -918,6 +918,34 @@ test('device sync resolves assigned shift and calculates late minutes on check-i
     assert.equal(attendance.shift_id.toString(), lateShift._id.toString());
     assert.equal(attendance.late_minutes, 10);
     assert.equal(attendance.status, 'CheckedOut');
+
+    // Idempotency check: replay with same event_id returns idempotent response
+    const eventId = `test-event-${Date.now()}`;
+    await request(app)
+        .post('/api/v1/attendance/sync-from-device')
+        .set('x-sync-secret', process.env.SYNC_SECRET)
+        .send({
+            event_id: eventId,
+            employee_id: lateEmployee._id.toString(),
+            check_in: checkIn.toISOString(),
+            check_out: checkOut.toISOString(),
+            device_id: 'CAM-LATE-001',
+        })
+        .expect(200);
+
+    const replayRes = await request(app)
+        .post('/api/v1/attendance/sync-from-device')
+        .set('x-sync-secret', process.env.SYNC_SECRET)
+        .send({
+            event_id: eventId,
+            employee_id: lateEmployee._id.toString(),
+            check_in: checkIn.toISOString(),
+            check_out: checkOut.toISOString(),
+            device_id: 'CAM-LATE-001',
+        })
+        .expect(200);
+
+    assert.equal(replayRes.body.idempotent, true);
     assert.ok(attendance.worked_hours > 0);
 });
 

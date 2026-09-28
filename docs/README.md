@@ -17,6 +17,8 @@ This folder keeps project documentation out of the repository root while preserv
 
 ## Planning
 
+- [ISO/IEC 25010 quality matrix](planning/iso-25010-quality-matrix.md)
+- [Production excellence roadmap](planning/production-excellence-roadmap.md)
 - [Implementation checklist](planning/implementation-checklist.md)
 - [Project improvement plan](planning/project-improvement-plan.md)
 

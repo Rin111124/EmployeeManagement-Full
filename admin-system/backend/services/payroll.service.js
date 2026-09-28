@@ -268,6 +268,213 @@ function buildContractSnapshot(contract, coverage) {
     };
 }
 
+async function finalizePayroll(payrollId, actorId, req) {
+    const { logAction } = require('./audit.service');
+    const { AUDIT_ACTIONS } = require('../constants/auditActions');
+
+    const payroll = await Payroll.findById(payrollId);
+    if (!payroll) {
+        throw new AppError('Payroll record not found', 404);
+    }
+    if (payroll.status === 'Finalized') {
+        return payroll;
+    }
+    payroll.status = 'Finalized';
+    await payroll.save();
+
+    await logAction({
+        userId: actorId,
+        action: AUDIT_ACTIONS.PAYROLL_FINALIZE,
+        target: `Payroll:${payroll._id}`,
+        metadata: {
+            payroll_id: payroll._id,
+            employee_id: payroll.employee_id,
+            month: payroll.month,
+            year: payroll.year,
+            net_salary: payroll.net_salary,
+        },
+        req,
+    });
+
+    return payroll;
+}
+
+async function createPayrollAdjustment(payload, actorId, req) {
+    const { PayrollAdjustment } = require('../models');
+    const { logAction } = require('./audit.service');
+    const { AUDIT_ACTIONS } = require('../constants/auditActions');
+
+    const {
+        payroll_id,
+        adjustment_type = 'Correction',
+        amount,
+        reason,
+    } = payload;
+
+    if (!reason || typeof reason !== 'string' || !reason.trim()) {
+        throw new AppError('Adjustment reason is required', 400);
+    }
+    const numAmount = Number(amount);
+    if (isNaN(numAmount) || numAmount === 0) {
+        throw new AppError('Adjustment amount must be a non-zero number', 400);
+    }
+
+    const payroll = await Payroll.findById(payroll_id);
+    if (!payroll) {
+        throw new AppError('Payroll record not found', 404);
+    }
+
+    const beforeNetSalary = payroll.net_salary;
+    const afterNetSalary = roundMoney(beforeNetSalary + numAmount);
+    if (afterNetSalary < 0) {
+        throw new AppError(`Adjustment would result in negative net salary (${afterNetSalary})`, 400);
+    }
+
+    // Require 2-step approval if absolute adjustment >= 5,000,000 VND or if payroll is already Finalized
+    const requiresTwoStep = Math.abs(numAmount) >= 5000000 || payroll.status === 'Finalized';
+
+    const adjustment = await PayrollAdjustment.create({
+        payroll_id,
+        employee_id: payroll.employee_id,
+        adjustment_type,
+        amount: numAmount,
+        reason: reason.trim(),
+        status: 'Pending',
+        requires_two_step_approval: requiresTwoStep,
+        created_by: actorId,
+        before_net_salary: beforeNetSalary,
+        after_net_salary: afterNetSalary,
+    });
+
+    await logAction({
+        userId: actorId,
+        action: AUDIT_ACTIONS.PAYROLL_ADJUSTMENT_CREATE,
+        target: `PayrollAdjustment:${adjustment._id}`,
+        metadata: {
+            adjustment_id: adjustment._id,
+            payroll_id,
+            employee_id: payroll.employee_id,
+            adjustment_type,
+            amount: numAmount,
+            reason: reason.trim(),
+            requires_two_step_approval: requiresTwoStep,
+        },
+        req,
+    });
+
+    return adjustment;
+}
+
+async function approvePayrollAdjustment(adjustmentId, actorId, req) {
+    const { PayrollAdjustment } = require('../models');
+    const { logAction } = require('./audit.service');
+    const { AUDIT_ACTIONS } = require('../constants/auditActions');
+
+    const adjustment = await PayrollAdjustment.findById(adjustmentId);
+    if (!adjustment) {
+        throw new AppError('Payroll adjustment not found', 404);
+    }
+
+    if (adjustment.status === 'Approved' || adjustment.status === 'Rejected') {
+        throw new AppError(`Adjustment is already in final state: ${adjustment.status}`, 400);
+    }
+
+    if (adjustment.requires_two_step_approval && adjustment.status === 'Pending') {
+        // Step 1 approval
+        adjustment.status = 'Approved_Step1';
+        adjustment.step1_approved_by = actorId;
+        adjustment.step1_approved_at = new Date();
+        await adjustment.save();
+
+        await logAction({
+            userId: actorId,
+            action: AUDIT_ACTIONS.PAYROLL_ADJUSTMENT_APPROVE_STEP1,
+            target: `PayrollAdjustment:${adjustment._id}`,
+            metadata: { adjustment_id: adjustment._id, step: 1 },
+            req,
+        });
+
+        return adjustment;
+    }
+
+    // Final approval step
+    if (adjustment.requires_two_step_approval) {
+        if (adjustment.step1_approved_by && adjustment.step1_approved_by.toString() === actorId.toString()) {
+            throw new AppError('Second approval must be performed by a different user (Two-step segregation)', 403);
+        }
+    }
+
+    adjustment.status = 'Approved';
+    adjustment.final_approved_by = actorId;
+    adjustment.final_approved_at = new Date();
+    adjustment.applied_at = new Date();
+    await adjustment.save();
+
+    // Apply adjustment to payroll record
+    const payroll = await Payroll.findById(adjustment.payroll_id);
+    if (payroll) {
+        payroll.net_salary = adjustment.after_net_salary;
+        if (adjustment.amount > 0) {
+            payroll.allowance = roundMoney((payroll.allowance || 0) + adjustment.amount);
+        } else {
+            payroll.deduction = roundMoney((payroll.deduction || 0) + Math.abs(adjustment.amount));
+        }
+        await payroll.save();
+    }
+
+    await logAction({
+        userId: actorId,
+        action: AUDIT_ACTIONS.PAYROLL_ADJUSTMENT_APPROVE_FINAL,
+        target: `PayrollAdjustment:${adjustment._id}`,
+        metadata: {
+            adjustment_id: adjustment._id,
+            payroll_id: adjustment.payroll_id,
+            applied_amount: adjustment.amount,
+            new_net_salary: adjustment.after_net_salary,
+        },
+        req,
+    });
+
+    return adjustment;
+}
+
+async function rejectPayrollAdjustment(adjustmentId, actorId, reason, req) {
+    const { PayrollAdjustment } = require('../models');
+    const { logAction } = require('./audit.service');
+    const { AUDIT_ACTIONS } = require('../constants/auditActions');
+
+    const adjustment = await PayrollAdjustment.findById(adjustmentId);
+    if (!adjustment) {
+        throw new AppError('Payroll adjustment not found', 404);
+    }
+
+    if (adjustment.status === 'Approved' || adjustment.status === 'Rejected') {
+        throw new AppError(`Adjustment is already in final state: ${adjustment.status}`, 400);
+    }
+
+    adjustment.status = 'Rejected';
+    adjustment.rejected_by = actorId;
+    adjustment.rejection_reason = reason || 'Rejected by approver';
+    await adjustment.save();
+
+    await logAction({
+        userId: actorId,
+        action: AUDIT_ACTIONS.PAYROLL_ADJUSTMENT_REJECT,
+        target: `PayrollAdjustment:${adjustment._id}`,
+        metadata: {
+            adjustment_id: adjustment._id,
+            reason: adjustment.rejection_reason,
+        },
+        req,
+    });
+
+    return adjustment;
+}
+
 module.exports = {
     generatePayroll,
+    finalizePayroll,
+    createPayrollAdjustment,
+    approvePayrollAdjustment,
+    rejectPayrollAdjustment,
 };

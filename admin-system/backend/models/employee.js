@@ -124,5 +124,8 @@ const employeeSchema = new Schema(
 );
 
 employeeSchema.index({ 'contact.email': 1 }, { sparse: true });
+employeeSchema.index({ status: 1 });
+employeeSchema.index({ department: 1, status: 1 }); // composite: list by dept + filter active
+employeeSchema.index({ hire_date: -1 }); // sort by hire date (reports)
 
 module.exports = mongoose.models.Employee || mongoose.model('Employee', employeeSchema);

@@ -51,6 +51,10 @@ const deviceService = {
     return apiPatch(`/devices/${id}/reject`, {});
   },
 
+  revokeDevice: async (id: string) => {
+    return apiPatch(`/devices/${id}/revoke`, {});
+  },
+
   toggleDbAccess: async (id: string, can_access_db: boolean) => {
     return apiPatch(`/devices/${id}/toggle-db-access`, { can_access_db });
   },

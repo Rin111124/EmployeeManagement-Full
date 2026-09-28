@@ -30,7 +30,7 @@ const authenticateDevice = asyncHandler(async (req, res, next) => {
     const device = await findDeviceByToken(token);
 
     if (!device) {
-        console.warn(`[DeviceAuth] Token not found in database: ${String(token).substring(0, 8)}...`);
+        // Do not log any part of the token — log a generic rejection instead
         return next(new AppError('Invalid device token', 403));
     }
 
@@ -42,6 +42,11 @@ const authenticateDevice = asyncHandler(async (req, res, next) => {
     if (!device.can_access_db) {
         console.warn(`[DeviceAuth] Device is approved but database access is disabled: ${device.device_name}`);
         return next(new AppError('Device database access is disabled', 403));
+    }
+
+    if (device.revoked_at) {
+        console.warn(`[DeviceAuth] Device token was revoked at ${device.revoked_at}: ${device.device_name}`);
+        return next(new AppError('Device access has been revoked', 403));
     }
 
     console.log(`[DeviceAuth] Success: ${device.device_name} authenticated`);

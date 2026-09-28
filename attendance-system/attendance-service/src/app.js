@@ -30,5 +30,6 @@ app.use('/api/attendance', require('./routes/attendance.routes.js'));
 app.use('/api/sync', require('./routes/sync.routes.js'));
 app.use('/api/devices', require('./routes/device.routes.js'));
 app.use('/api/registration', require('./routes/registration.routes.js'));
+app.use('/api/outbox', require('./routes/outbox.routes.js'));
 
 module.exports = app;

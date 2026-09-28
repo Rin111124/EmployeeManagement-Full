@@ -82,10 +82,45 @@ function validateEmbedding(embedding) {
     return true;
 }
 
+/**
+ * P1-BIO-02: Validate liveness & anti-spoofing score from kiosk / AI service.
+ * Rejects printed photo attacks, phone screen replays, and video loops.
+ *
+ * @param {object} payload - Request payload or face metadata
+ * @param {number} [payload.liveness_score] - Score between 0.0 and 1.0
+ * @param {boolean} [payload.is_live] - Explicit boolean flag if computed on device
+ * @returns {{ valid: boolean, reason?: string }}
+ */
+function validateLiveness(payload) {
+    if (!payload || typeof payload !== 'object') {
+        return { valid: false, reason: 'Missing liveness payload' };
+    }
+
+    if (payload.is_live === false) {
+        return { valid: false, reason: 'Face failed liveness verification (Spoof attempt detected)' };
+    }
+
+    if (typeof payload.liveness_score === 'number') {
+        const MIN_LIVENESS_SCORE = 0.70;
+        if (payload.liveness_score < MIN_LIVENESS_SCORE) {
+            return {
+                valid: false,
+                reason: `Liveness score (${payload.liveness_score.toFixed(2)}) below required threshold (${MIN_LIVENESS_SCORE})`,
+            };
+        }
+    }
+
+    return { valid: true };
+}
+
 module.exports = {
     cosineSimilarity,
     validateEmbedding,
+    validateLiveness,
     /** Minimum cosine similarity to consider two embeddings a match (InsightFace buffalo_l). */
     CONFIDENCE_THRESHOLD: 0.45,
+    /** P1-BIO-07: Maximum candidate vectors sent to AI service in a single matching batch. */
+    MAX_CANDIDATES_PER_INFERENCE: 2000,
 };
+
 

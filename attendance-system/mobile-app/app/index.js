@@ -5,8 +5,8 @@ import { useRouter } from 'expo-router';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Theme } from '../src/theme/theme';
-import { aiApi, attendanceApi, deviceApi, getDefaultApiConfig, hasConfiguredApiEnv, updateApiConfig } from '../src/services/api';
-import { initSocket, disconnectSocket, getSocket } from '../src/services/socket';
+import { aiApi, attendanceApi, deviceApi, getDefaultApiConfig, hasConfiguredApiEnv, updateApiConfig, probeHost, discoverServerHost } from '../src/services/api';
+import { initSocket, disconnectSocket, getSocket, reconnectSocketWithToken } from '../src/services/socket';
 
 // Import các thành phần
 import Header from '../src/components/ui/Header';
@@ -75,22 +75,51 @@ export default function Index() {
   const [isStreamingFrame, setIsStreamingFrame] = useState(false);
 
   const [config, setConfig] = useState(DEFAULT_CONFIG);
+  const [connectionStatus, setConnectionStatus] = useState('connecting'); // 'connected' | 'connecting' | 'disconnected'
 
   useEffect(() => {
     const loadSavedConfig = async () => {
+      let activeConfig = { ...DEFAULT_CONFIG };
       try {
         const raw = await AsyncStorage.getItem(CONFIG_STORAGE_KEY);
-        if (!raw) return;
-        const parsed = JSON.parse(raw);
-        if (!parsed || typeof parsed !== 'object') return;
-        setConfig((prev) => ({
-          ...prev,
-          ...(hasConfiguredApiEnv() ? {} : parsed),
-          aiApiKey: prev.aiApiKey || '',
-        }));
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (parsed && typeof parsed === 'object') {
+            activeConfig = {
+              ...DEFAULT_CONFIG,
+              ...(hasConfiguredApiEnv() ? {} : parsed),
+              aiApiKey: '',
+            };
+          }
+        }
       } catch (_e) {
         // Ignore invalid config and keep defaults.
       }
+
+      // Tự động kiểm tra tính khả dụng của máy chủ hiện tại
+      const currentHost = activeConfig.adminUrl.replace(/^https?:\/\//, '').split(':')[0];
+      const isLive = await probeHost(currentHost, 800);
+      if (isLive) {
+        setConnectionStatus('connected');
+      } else {
+        setConnectionStatus('connecting');
+        debugLog('[AUTO-DISCOVERY] Current host is offline, scanning network for active server...');
+        const discovered = await discoverServerHost();
+        if (discovered.success && discovered.host) {
+          activeConfig = {
+            ...activeConfig,
+            adminUrl: discovered.adminUrl,
+            aiServiceUrl: discovered.aiServiceUrl,
+            attendanceUrl: discovered.attendanceUrl,
+          };
+          debugLog('[AUTO-DISCOVERY] Auto-connected to discovered server:', discovered.host);
+          setConnectionStatus('connected');
+        } else {
+          setConnectionStatus('disconnected');
+        }
+      }
+
+      setConfig(activeConfig);
     };
 
     loadSavedConfig();
@@ -100,7 +129,7 @@ export default function Index() {
     if (!permission) requestPermission();
   }, [permission, requestPermission]);
 
-  // Đồng bộ cấu hình ngay khi config thay đổi
+  // Đồng bộ cấu hình API và lưu trữ cục bộ khi config thay đổi
   useEffect(() => {
     updateApiConfig({
       adminUrl: config.adminUrl,
@@ -114,12 +143,113 @@ export default function Index() {
     setSystemInfo(prev => ({ ...prev, ip: currentIp }));
 
     AsyncStorage.setItem(CONFIG_STORAGE_KEY, JSON.stringify(getPersistableConfig(config))).catch(() => { });
-    
-    // Khởi tạo socket khi adminUrl thay đổi
-    initSocket(config.adminUrl);
-
-    return () => disconnectSocket();
   }, [config]);
+
+  // Khởi tạo socket và lắng nghe sự kiện kết nối
+  useEffect(() => {
+    let isMounted = true;
+    let cleanupSocket = null;
+
+    const setupSocket = async () => {
+      try {
+        const sock = await initSocket(config.adminUrl);
+        if (!isMounted || !sock) return;
+
+        const onConnect = () => {
+          if (!isMounted) return;
+          debugLog('[SOCKET] Connected to Admin Server');
+          setConnectionStatus('connected');
+        };
+
+        const onDisconnect = (reason) => {
+          if (!isMounted) return;
+          debugLog('[SOCKET] Disconnected from Admin Server:', reason);
+          setConnectionStatus('disconnected');
+        };
+
+        const onConnectError = () => {
+          if (!isMounted) return;
+          setConnectionStatus('disconnected');
+        };
+
+        sock.on('connect', onConnect);
+        sock.on('disconnect', onDisconnect);
+        sock.on('connect_error', onConnectError);
+
+        if (sock.connected) {
+          setConnectionStatus('connected');
+        }
+
+        cleanupSocket = () => {
+          sock.off('connect', onConnect);
+          sock.off('disconnect', onDisconnect);
+          sock.off('connect_error', onConnectError);
+        };
+      } catch (_err) {
+        if (isMounted) setConnectionStatus('disconnected');
+      }
+    };
+
+    setupSocket();
+
+    return () => {
+      isMounted = false;
+      if (cleanupSocket) cleanupSocket();
+      disconnectSocket();
+    };
+  }, [config.adminUrl]);
+
+  // Heartbeat probe định kỳ kiểm tra backend (mỗi 8 giây)
+  useEffect(() => {
+    let isMounted = true;
+
+    const checkServer = async () => {
+      // Tránh probe khi đang scanning nhận diện để giữ băng thông mượt
+      if (state === TerminalState.SCANNING) return;
+
+      const currentHost = config.adminUrl.replace(/^https?:\/\//, '').split(':')[0].replace(/\/.*$/, '');
+      const isLive = await probeHost(currentHost, 1000);
+      if (!isMounted) return;
+
+      setConnectionStatus(isLive ? 'connected' : 'disconnected');
+    };
+
+    const intervalId = setInterval(checkServer, 8000);
+
+    return () => {
+      isMounted = false;
+      clearInterval(intervalId);
+    };
+  }, [config.adminUrl, state]);
+
+  // Xử lý thủ công nút kết nối lại khi người dùng bấm vào Header, Badge hoặc Footer
+  const handleRetryConnection = async () => {
+    setConnectionStatus('connecting');
+    const currentHost = config.adminUrl.replace(/^https?:\/\//, '').split(':')[0].replace(/\/.*$/, '');
+    const isLive = await probeHost(currentHost, 1200);
+
+    if (isLive) {
+      setConnectionStatus('connected');
+      await reconnectSocketWithToken(config.adminUrl);
+      return;
+    }
+
+    // Quét tìm máy chủ trong mạng LAN nếu host cũ không phản hồi
+    const discovered = await discoverServerHost();
+    if (discovered.success && discovered.host) {
+      const nextConfig = {
+        ...config,
+        adminUrl: discovered.adminUrl,
+        aiServiceUrl: discovered.aiServiceUrl,
+        attendanceUrl: discovered.attendanceUrl,
+      };
+      setConfig(nextConfig);
+      setConnectionStatus('connected');
+      await reconnectSocketWithToken(discovered.adminUrl);
+    } else {
+      setConnectionStatus('disconnected');
+    }
+  };
 
   const captureEmbedding = async () => {
     if (!cameraRef.current?.takePictureAsync) {
@@ -285,6 +415,8 @@ export default function Index() {
 
         <Header
           status={state === TerminalState.SCANNING ? 'SCANNING...' : isStreamingFrame ? 'STREAMING...' : 'ONLINE'}
+          connectionStatus={connectionStatus}
+          onRetryConnection={handleRetryConnection}
           onOpenSettings={() => setIsSettingsVisible(true)}
           onStreamFrame={streamFrameOnce}
           isStreaming={isStreamingFrame}
@@ -298,7 +430,14 @@ export default function Index() {
 
           {/* HUD Overlay Layer */}
           <View style={styles.hudOverlay}>
-            {state === TerminalState.IDLE && <IdleState onStartScan={startScan} />}
+            {state === TerminalState.IDLE && (
+              <IdleState 
+                onStartScan={startScan} 
+                connectionStatus={connectionStatus}
+                serverHost={config.adminUrl.replace(/^https?:\/\//, '').split(':')[0]}
+                onRetryConnection={handleRetryConnection}
+              />
+            )}
             {state === TerminalState.SCANNING && <ScanningState />}
             {state === TerminalState.SUCCESS && (
               <SuccessState
@@ -341,7 +480,11 @@ export default function Index() {
           </View>
         </View>
 
-        <Footer info={systemInfo} />
+        <Footer 
+          info={systemInfo} 
+          connectionStatus={connectionStatus}
+          onRetryConnection={handleRetryConnection}
+        />
 
         {/* Visual Decorative Overlays */}
         <View style={styles.gridOverlay} pointerEvents="none" />

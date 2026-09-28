@@ -2,14 +2,14 @@ const Attendance = require('../models/Attendance');
 const LocalEmployee = require('../models/LocalEmployee');
 const LocalDevice = require('../models/LocalDevice');
 const { pushAttendanceToAdmin } = require('../services/adminSync.service');
-const { cosineSimilarity } = require('../utils/faceMatching');
-
-/**
- * Ngưỡng độ tương đồng tối thiểu để xác nhận nhận dạng khuôn mặt.
- * Hạ xuống 0.45 để phù hợp với môi trường thực tế (ánh sáng, góc chụp khác nhau).
- * 0.82 là quá khắt khe đối với InsightFace buffalo_l trong thực tế.
- */
-const CONFIDENCE_THRESHOLD = 0.45;
+// Fix 6: Import CONFIDENCE_THRESHOLD from the canonical source instead of duplicating it here.
+// registration.controller.js already uses this same import — one source of truth.
+const {
+    cosineSimilarity,
+    validateLiveness,
+    CONFIDENCE_THRESHOLD,
+    MAX_CANDIDATES_PER_INFERENCE,
+} = require('../utils/faceMatching');
 
 const axios = require('axios');
 const env = require('../config/env');
@@ -20,17 +20,36 @@ exports.recognize = async (req, res) => {
     try {
         const { embedding, device_id } = req.body;
 
-        if (!Array.isArray(embedding) || embedding.length === 0 || !device_id) {
-            return res.status(400).json({
+        // P1-BIO-02: Liveness & anti-spoofing verification
+        const livenessCheck = validateLiveness(req.body);
+        if (!livenessCheck.valid) {
+            return res.status(403).json({
                 success: false,
-                message: 'embedding and device_id are required'
+                code: 'LIVENESS_FAILED',
+                message: livenessCheck.reason,
             });
         }
 
+        // Fix 4: Validate each required field separately so the client gets a clear
+        // 400 message instead of a 500 from the Mongoose ValidationError later.
+        if (!Array.isArray(embedding) || embedding.length === 0) {
+            return res.status(400).json({
+                success: false,
+                message: 'embedding is required and must be a non-empty array'
+            });
+        }
+        if (!device_id) {
+            return res.status(400).json({
+                success: false,
+                message: 'device_id is required'
+            });
+        }
+
+        // P1-BIO-07: Query candidate vector boundary limited to active employees & capped batch
         const employees = await LocalEmployee.find({
             status: 'Active',
             face_embedding: { $exists: true, $not: { $size: 0 } }
-        });
+        }).limit(MAX_CANDIDATES_PER_INFERENCE);
 
         if (employees.length === 0) {
             return res.status(404).json({
@@ -89,67 +108,73 @@ exports.recognize = async (req, res) => {
             });
         }
 
-        // BUG-6 FIX: query bằng khoảng thời gian work_date (0h → 23:59:59)
-        // thay vì check_in >= today để tránh sai ngày khi làm ca đêm qua 0h.
-        let attendance = await Attendance.findOne({
-            employee_id: bestMatch.employee_id,
-            $or: [{ check_out: { $exists: false } }, { check_out: null }],
-        }).sort({ check_in: -1 });
-
+        const confidence = Math.min(1, Math.max(0, maxSimilarity));
         const todayStart = new Date();
         todayStart.setHours(0, 0, 0, 0);
-        const todayEnd = new Date();
-        todayEnd.setHours(23, 59, 59, 999);
 
-        const completedToday = attendance ? null : await Attendance.findOne({
+        // Fix 1: Use a single atomic findOneAndUpdate to handle the check-out path.
+        // Previously two separate queries (findOne → read → save) created a race window
+        // where two concurrent requests could both read "no check-out exists" and both
+        // proceed to create a new check-in record.
+        //
+        // By looking for any open record ($or: check_out null or missing) sorted by latest check_in,
+        // we support overnight shifts where the check-in occurred on the previous day.
+        const openRecord = await Attendance.findOneAndUpdate(
+            {
+                employee_id: bestMatch.employee_id,
+                $or: [{ check_out: { $exists: false } }, { check_out: null }],
+            },
+            { $set: { check_out: new Date(), status: 'present' } },
+            { new: true, sort: { check_in: -1 } }
+        );
+
+        if (openRecord) {
+            // Push update to admin via outbox (reliable sync)
+            pushAttendanceToAdmin(openRecord).catch(console.error);
+
+            return res.status(200).json({
+                success: true,
+                message: 'Xác nhận check-out thành công',
+                action: 'check-out',
+                employee: {
+                    employee_id: bestMatch.employee_id,
+                    full_name: bestMatch.full_name,
+                    confidence: (confidence * 100).toFixed(2) + '%'
+                }
+            });
+        }
+
+        // No open record — check if the employee already completed attendance today
+        const completedToday = await Attendance.findOne({
             employee_id: bestMatch.employee_id,
-            check_in: { $gte: todayStart, $lte: todayEnd },
+            check_in: { $gte: todayStart },
             check_out: { $ne: null },
         });
 
-        const confidence = Math.min(1, Math.max(0, maxSimilarity));
-
-        let action = 'check-in';
-        if (attendance) {
-            if (!attendance.check_out) {
-                attendance.check_out = new Date();
-                attendance.status = 'present';
-                await attendance.save();
-
-                // Push update to admin (fire-and-forget, không block response)
-                pushAttendanceToAdmin(attendance).catch(console.error);
-
-                action = 'check-out';
-            } else {
-                return res.status(200).json({
-                    success: true,
-                    message: 'Bạn đã hoàn tất chấm công ngày hôm nay',
-                    employee: bestMatch
-                });
-            }
-        } else if (completedToday) {
+        if (completedToday) {
             return res.status(200).json({
                 success: true,
-                message: 'Ban da hoan tat cham cong ngay hom nay',
+                message: 'Bạn đã hoàn tất chấm công ngày hôm nay',
                 employee: bestMatch
             });
-        } else {
-            attendance = await Attendance.create({
-                employee_id: bestMatch.employee_id,
-                device_id: device_id,
-                check_in: new Date(),
-                confidence,
-                status: 'present'
-            });
-
-            // Push check-in to admin (fire-and-forget)
-            pushAttendanceToAdmin(attendance).catch(console.error);
         }
 
-        res.status(200).json({
+        // Create new check-in record
+        const attendance = await Attendance.create({
+            employee_id: bestMatch.employee_id,
+            device_id,
+            check_in: new Date(),
+            confidence,
+            status: 'present'
+        });
+
+        // Push check-in to admin via outbox (reliable sync)
+        pushAttendanceToAdmin(attendance).catch(console.error);
+
+        return res.status(200).json({
             success: true,
-            message: `Xác nhận ${action} thành công`,
-            action,
+            message: 'Xác nhận check-in thành công',
+            action: 'check-in',
             employee: {
                 employee_id: bestMatch.employee_id,
                 full_name: bestMatch.full_name,
@@ -175,6 +200,7 @@ exports.checkIn = async (req, res) => {
             device_id: req.body.device_id,
             check_in: req.body.check_in ? new Date(req.body.check_in) : new Date(),
             status: req.body.status || 'present',
+            method: 'manual',
         };
 
         if (typeof req.body.confidence === 'number') {
@@ -182,6 +208,8 @@ exports.checkIn = async (req, res) => {
         }
 
         const attendance = await Attendance.create(payload);
+        pushAttendanceToAdmin(attendance).catch(console.error);
+
         res.status(201).json({ success: true, data: attendance });
     } catch (err) {
         res.status(500).json({ success: false, message: err.message });
@@ -197,7 +225,7 @@ exports.checkOut = async (req, res) => {
         if (id) {
             attendance = await Attendance.findOneAndUpdate(
                 { _id: id, $or: [{ check_out: { $exists: false } }, { check_out: null }] },
-                { check_out: Date.now() },
+                { check_out: new Date() },
                 { new: true }
             );
         } else if (req.body.employee_id) {
@@ -206,7 +234,7 @@ exports.checkOut = async (req, res) => {
                     employee_id: req.body.employee_id,
                     $or: [{ check_out: { $exists: false } }, { check_out: null }],
                 },
-                { check_out: Date.now() },
+                { check_out: new Date() },
                 { new: true, sort: { check_in: -1 } }
             );
         } else {
@@ -217,8 +245,12 @@ exports.checkOut = async (req, res) => {
             return res.status(404).json({ success: false, message: 'Attendance record not found' });
         }
 
+        pushAttendanceToAdmin(attendance).catch(console.error);
+
         res.status(200).json({ success: true, data: attendance });
     } catch (err) {
         res.status(500).json({ success: false, message: err.message });
     }
 };
+
+

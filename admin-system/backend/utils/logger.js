@@ -1,4 +1,5 @@
 const env = require('../config/env');
+const { maskPII } = require('./cryptoVault');
 
 /**
  * Core log function.
@@ -9,12 +10,13 @@ const env = require('../config/env');
  * @param {string} [requestId] - Optional request ID for end-to-end tracing (req.requestId)
  */
 function log(level, message, meta, requestId) {
+    const sanitizedMeta = meta ? maskPII(meta) : undefined;
     const payload = {
         level,
         message,
         timestamp: new Date().toISOString(),
         ...(requestId ? { requestId } : {}),
-        ...(meta ? { meta } : {}),
+        ...(sanitizedMeta ? { meta: sanitizedMeta } : {}),
     };
 
     if (env.nodeEnv === 'test') {

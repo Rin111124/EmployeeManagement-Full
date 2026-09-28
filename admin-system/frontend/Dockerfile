@@ -2,7 +2,7 @@ FROM node:22-alpine AS build
 
 WORKDIR /app
 
-ARG VITE_API_BASE=http://localhost:5000/api/v1
+ARG VITE_API_BASE=/api/v1
 ENV VITE_API_BASE=$VITE_API_BASE
 
 COPY package*.json ./

@@ -152,7 +152,6 @@ async function login({ username, password }, context = {}) {
     return {
         user: sanitizeUser(user),
         access_token: tokens.accessToken,
-        token: tokens.accessToken,
         refresh_token: tokens.refreshToken,
         refresh_expires_at: tokens.refreshExpiresAt,
     };
@@ -222,7 +221,6 @@ async function refresh(refreshToken, context = {}) {
     return {
         user: sanitizeUser(user),
         access_token: tokens.accessToken,
-        token: tokens.accessToken,
         refresh_token: tokens.refreshToken,
         refresh_expires_at: tokens.refreshExpiresAt,
     };

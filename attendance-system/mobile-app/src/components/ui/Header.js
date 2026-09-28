@@ -1,11 +1,23 @@
 import React, { useEffect, useRef } from 'react';
 import { StyleSheet, View, Text, Animated, TouchableOpacity } from 'react-native';
-import { Camera, Shield, Settings } from 'lucide-react-native';
+import { Camera, Shield, Settings, Wifi, WifiOff, RefreshCw } from 'lucide-react-native';
 import { Theme, Glows } from '../../theme/theme';
 
-export default function Header({ status, onOpenSettings, onStreamFrame, isStreaming }) {
+export default function Header({ 
+  status, 
+  connectionStatus = 'connected',
+  onRetryConnection,
+  onOpenSettings, 
+  onStreamFrame, 
+  isStreaming 
+}) {
   const sweepAnim = useRef(new Animated.Value(-1)).current;
   const pulseAnim = useRef(new Animated.Value(0.5)).current;
+  const spinAnim = useRef(new Animated.Value(0)).current;
+
+  const isConnected = connectionStatus === 'connected';
+  const isConnecting = connectionStatus === 'connecting';
+  const isDisconnected = connectionStatus === 'disconnected';
 
   useEffect(() => {
     // Sweep animation for the decorative line
@@ -17,19 +29,77 @@ export default function Header({ status, onOpenSettings, onStreamFrame, isStream
       })
     ).start();
 
-    // Pulse animation for the status dot
-    Animated.loop(
+    // Pulse animation for the status dot (faster if disconnected or connecting)
+    const pulseDuration = isDisconnected ? 500 : isConnecting ? 700 : 1200;
+    const pulseLoop = Animated.loop(
       Animated.sequence([
-        Animated.timing(pulseAnim, { toValue: 1, duration: 1000, useNativeDriver: true }),
-        Animated.timing(pulseAnim, { toValue: 0.5, duration: 1000, useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 1, duration: pulseDuration, useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: isDisconnected ? 0.2 : 0.5, duration: pulseDuration, useNativeDriver: true }),
       ])
-    ).start();
-  }, [pulseAnim, sweepAnim]);
+    );
+    pulseLoop.start();
+
+    // Spin animation for connecting icon
+    let spinLoop;
+    if (isConnecting) {
+      spinLoop = Animated.loop(
+        Animated.timing(spinAnim, {
+          toValue: 1,
+          duration: 1200,
+          useNativeDriver: true,
+        })
+      );
+      spinLoop.start();
+    } else {
+      spinAnim.setValue(0);
+    }
+
+    return () => {
+      pulseLoop.stop();
+      if (spinLoop) spinLoop.stop();
+    };
+  }, [pulseAnim, sweepAnim, spinAnim, connectionStatus, isDisconnected, isConnecting]);
 
   const sweepTranslateX = sweepAnim.interpolate({
     inputRange: [-1, 2],
     outputRange: [-200, 500],
   });
+
+  const spin = spinAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '360deg'],
+  });
+
+  // Color mapping based on connection state
+  const statusColor = isConnected 
+    ? Theme.colors.green.container 
+    : isConnecting 
+      ? Theme.colors.amber.container 
+      : Theme.colors.red.tertiary;
+
+  const statusGlow = isConnected 
+    ? Glows.green 
+    : isConnecting 
+      ? Glows.amber 
+      : Glows.red;
+
+  const statusBg = isConnected
+    ? 'rgba(52, 255, 141, 0.08)'
+    : isConnecting
+      ? 'rgba(245, 158, 11, 0.12)'
+      : 'rgba(255, 51, 102, 0.15)';
+
+  const statusBorderColor = isConnected
+    ? 'rgba(52, 255, 141, 0.3)'
+    : isConnecting
+      ? 'rgba(245, 158, 11, 0.4)'
+      : 'rgba(255, 51, 102, 0.5)';
+
+  const displayLabel = isConnected 
+    ? (status || 'ONLINE')
+    : isConnecting 
+      ? 'KẾT NỐI...' 
+      : 'MẤT KẾT NỐI';
 
   return (
     <View style={styles.header}>
@@ -51,10 +121,33 @@ export default function Header({ status, onOpenSettings, onStreamFrame, isStream
       </View>
 
       <View style={styles.rightSection}>
-        <View style={styles.statusContainer}>
-          <Animated.View style={[styles.statusDot, { opacity: pulseAnim }]} />
-          <Text style={styles.statusLabel}>{status}</Text>
-        </View>
+        {/* Status Pill Badge - Clickable to reconnect */}
+        <TouchableOpacity 
+          style={[
+            styles.statusBadge, 
+            { backgroundColor: statusBg, borderColor: statusBorderColor },
+            statusGlow
+          ]}
+          onPress={onRetryConnection}
+          activeOpacity={0.7}
+        >
+          {isConnected && <Wifi size={13} color={statusColor} />}
+          {isConnecting && (
+            <Animated.View style={{ transform: [{ rotate: spin }] }}>
+              <RefreshCw size={13} color={statusColor} />
+            </Animated.View>
+          )}
+          {isDisconnected && <WifiOff size={13} color={statusColor} />}
+
+          <Animated.View 
+            style={[
+              styles.statusDot, 
+              { backgroundColor: statusColor, opacity: pulseAnim }
+            ]} 
+          />
+          <Text style={[styles.statusLabel, { color: statusColor }]}>{displayLabel}</Text>
+        </TouchableOpacity>
+
         <View style={styles.divider} />
         <Text style={styles.dateText}>
           {new Date().toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' })}
@@ -122,24 +215,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 15,
   },
-  statusContainer: {
+  statusBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 6,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    borderRadius: 14,
+    borderWidth: 1,
   },
   statusDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: Theme.colors.green.fixed,
-    ...Glows.green,
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
   },
   statusLabel: {
-    color: Theme.colors.green.fixed,
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: 'bold',
     fontFamily: 'monospace',
-    letterSpacing: 1,
+    letterSpacing: 0.8,
   },
   divider: {
     width: 1,

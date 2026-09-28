@@ -4,6 +4,25 @@
 # NEVER commit .env.docker to version control.
 
 services:
+  reverse-proxy:
+    image: nginx:1.27-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deployment/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./deployment/nginx/certs:/etc/nginx/certs:ro
+    depends_on:
+      admin-frontend:
+        condition: service_started
+      admin-backend:
+        condition: service_healthy
+      attendance-service:
+        condition: service_healthy
+    networks:
+      - frontend_net
+      - internal_net
+
   mongodb:
     image: mongo:7
     # Do not publish MongoDB in production. Other containers reach it through
@@ -20,11 +39,14 @@ services:
       timeout: 5s
       retries: 5
       start_period: 20s
+    networks:
+      - internal_net
 
   admin-backend:
     build: ./admin-system/backend
-    ports:
-      - "5000:5000"
+    # P0-TLS-05: No direct port exposure — only accessible via nginx reverse proxy
+    # ports:
+    #   - "5000:5000"  # REMOVE: admin-backend must not be directly reachable from host
     env_file: .env.docker
     environment:
       - MONGODB_URI=mongodb://${MONGO_ROOT_USER}:${MONGO_ROOT_PASSWORD}@mongodb:27017/hrms?authSource=admin
@@ -36,6 +58,9 @@ services:
       - COOKIE_SECURE=${COOKIE_SECURE}
       - COOKIE_SAME_SITE=${COOKIE_SAME_SITE}
       - SYNC_SECRET=${SYNC_SECRET}
+      - AI_SERVICE_URL=http://ai-service:8000
+      - AI_API_KEY=${AI_API_KEY}
+      - REQUIRE_SYNC_SIGNATURE=${REQUIRE_SYNC_SIGNATURE:-true}
       - CHATBOT_PROVIDER=${CHATBOT_PROVIDER:-gemini}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - GEMINI_MODEL=${GEMINI_MODEL:-gemini-2.5-pro}
@@ -50,26 +75,27 @@ services:
       timeout: 5s
       retries: 3
       start_period: 30s
+    networks:
+      - internal_net
 
   admin-frontend:
     build:
       context: ./admin-system/frontend
       args:
-        VITE_API_BASE: ${VITE_API_BASE:-http://localhost:5000/api/v1}
-    ports:
-      - "3000:80"
+        # Browser calls the same origin; nginx forwards /api/v1 to the backend.
+        VITE_API_BASE: ${VITE_API_BASE:-/api/v1}
     depends_on:
       admin-backend:
         condition: service_healthy
+    networks:
+      - frontend_net
+      - internal_net
 
   ai-service:
     build: ./attendance-system/ai-service
-    ports:
-      - "8000:8000"
-    # Kiosk currently calls AI service directly. In production, restrict this
-    # port with host firewall rules or place it behind a private reverse proxy.
-    volumes:
-      - ai_models:/root/.insightface/models
+    # P0-TLS-05: No direct port exposure — only accessible from attendance-service on internal_net
+    # ports:
+    #   - "8000:8000"  # REMOVE: ai-service must not be directly reachable from host
     env_file: .env.docker
     environment:
       - ENVIRONMENT=production
@@ -80,15 +106,19 @@ services:
       timeout: 10s
       retries: 3
       start_period: 300s
+    networks:
+      - internal_net
 
   attendance-service:
     build: ./attendance-system/attendance-service
-    ports:
-      - "5001:5001"
+    # P0-TLS-05: No direct port exposure — only accessible via nginx on internal_net
+    # ports:
+    #   - "5001:5001"  # REMOVE: attendance-service must not be directly reachable from host
     env_file: .env.docker
     environment:
       - MONGODB_URI=mongodb://${MONGO_ROOT_USER}:${MONGO_ROOT_PASSWORD}@mongodb:27017/attendance?authSource=admin
       - ADMIN_URL=http://admin-backend:5000/api/v1
+      - AI_SERVICE_URL=http://ai-service:8000
       - SYNC_SECRET=${SYNC_SECRET}
       - CORS_ORIGIN=${CORS_ORIGIN}
     depends_on:
@@ -102,7 +132,18 @@ services:
       timeout: 5s
       retries: 3
       start_period: 20s
+    networks:
+      - internal_net
+
+networks:
+  frontend_net:
+    driver: bridge
+  internal_net:
+    driver: bridge
+    # P0-TLS-05: internal: true prevents containers on this network from making
+    # outbound connections to external networks (internet). They can only reach
+    # each other and the reverse-proxy which bridges both networks.
+    internal: true
 
 volumes:
   mongo_data:
-  ai_models:

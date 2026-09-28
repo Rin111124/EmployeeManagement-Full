@@ -62,8 +62,8 @@ AI_API_KEY
 Dien URL theo IP hoac domain that cua server:
 
 ```env
-CORS_ORIGIN=http://SERVER_IP_OR_DOMAIN:3000
-VITE_API_BASE=http://SERVER_IP_OR_DOMAIN:5000/api/v1
+CORS_ORIGIN=https://SERVER_IP_OR_DOMAIN
+VITE_API_BASE=/api/v1
 ```
 
 Neu dung HTTPS:
@@ -85,7 +85,7 @@ Tu thu muc goc du an:
 docker compose --env-file .env.docker up -d --build
 ```
 
-Lan khoi dong dau tien cua `ai-service` co the mat vai phut vi service phai tai model nhan dien khuon mat `buffalo_l`. Model nay duoc luu trong Docker volume `ai_models`, nen cac lan restart sau se nhanh hon.
+Image `ai-service` tai model `buffalo_l` khi build. Runtime AI container khong can truy cap Internet.
 
 Kiem tra container dang chay:
 
@@ -106,10 +106,7 @@ docker compose --env-file .env.docker logs -f ai-service
 Mo cac URL sau tu server hoac may khac cung mang:
 
 ```text
-http://SERVER_IP_OR_DOMAIN:3000
-http://SERVER_IP_OR_DOMAIN:5000/health
-http://SERVER_IP_OR_DOMAIN:5001/health
-http://SERVER_IP_OR_DOMAIN:8000/
+https://SERVER_IP_OR_DOMAIN/
 ```
 
 Neu mobile app chay tren dien thoai that, dien thoai phai truy cap duoc IP/domain cua server qua mang.
@@ -122,16 +119,15 @@ Kiosk app `.env` example:
 
 ```env
 EXPO_PUBLIC_API_HOST=SERVER_IP_OR_DOMAIN
-EXPO_PUBLIC_ADMIN_URL=http://SERVER_IP_OR_DOMAIN:5000
-EXPO_PUBLIC_AI_SERVICE_URL=http://SERVER_IP_OR_DOMAIN:8000
-EXPO_PUBLIC_ATTENDANCE_URL=http://SERVER_IP_OR_DOMAIN:5001/api
+EXPO_PUBLIC_ADMIN_URL=https://SERVER_IP_OR_DOMAIN
+EXPO_PUBLIC_ATTENDANCE_URL=https://SERVER_IP_OR_DOMAIN/attendance/api
 ```
 
 Employee app `.env` example:
 
 ```env
 EXPO_PUBLIC_API_HOST=SERVER_IP_OR_DOMAIN
-EXPO_PUBLIC_ADMIN_URL=http://SERVER_IP_OR_DOMAIN:5000/api/v1
+EXPO_PUBLIC_ADMIN_URL=https://SERVER_IP_OR_DOMAIN
 ```
 
 Khong dung `localhost` khi build APK. Tren dien thoai, `localhost` la chinh dien thoai, khong phai server deployment.

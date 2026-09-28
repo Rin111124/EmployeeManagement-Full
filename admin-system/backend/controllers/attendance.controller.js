@@ -124,14 +124,38 @@ const monthlyReport = asyncHandler(async (req, res) => {
  * Chỉ được gọi từ attendance-service với x-sync-secret header.
  */
 const syncFromDevice = asyncHandler(async (req, res) => {
-    const { employee_id, check_in, check_out } = req.body;
+    const { employee_id, check_in, check_out, event_id } = req.body;
 
     if (!employee_id || !check_in) {
         return res.status(400).json({ success: false, message: 'employee_id and check_in are required' });
     }
 
+    const { InboxEvent } = require('../models');
+    if (event_id) {
+        const existingEvent = await InboxEvent.findOne({ event_id });
+        if (existingEvent) {
+            return res.status(200).json({
+                success: true,
+                message: 'Event already processed (idempotent)',
+                data: existingEvent.payload,
+                idempotent: true,
+            });
+        }
+    }
+
     const attendance = await attendanceService.syncFromDevice(req.body);
 
+    if (event_id) {
+        try {
+            await InboxEvent.create({
+                event_id,
+                event_type: check_out ? 'attendance.checked_out' : 'attendance.checked_in',
+                payload: attendance,
+            });
+        } catch (_) {
+            // In case of concurrent replay, duplicate key is handled
+        }
+    }
 
     // Broadcast realtime event qua Socket.IO singleton
     try {

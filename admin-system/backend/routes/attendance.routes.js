@@ -2,7 +2,7 @@ const express = require('express');
 const attendanceController = require('../controllers/attendance.controller');
 const { MANAGEMENT_ROLES } = require('../constants/roles');
 const { authenticate, authorize, authorizeSelfOrRoles } = require('../middlewares/auth.middleware');
-const { verifySyncSecret } = require('../middlewares/syncAuth.middleware');
+const { verifySyncAuth } = require('../middlewares/serviceAuth.middleware');
 const validate = require('../middlewares/validate.middleware');
 const {
     checkInSchema,
@@ -17,7 +17,7 @@ const {
 
 const router = express.Router();
 
-router.post('/sync-from-device', verifySyncSecret, attendanceController.syncFromDevice);
+router.post('/sync-from-device', verifySyncAuth, attendanceController.syncFromDevice);
 
 router.use(authenticate);
 

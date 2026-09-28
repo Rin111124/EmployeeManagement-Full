@@ -38,20 +38,20 @@ export default defineConfig({
         },
     ],
 
-    // Optionally start dev servers before tests
-    // Uncomment if you want playwright to manage the servers:
-    // webServer: [
-    //     {
-    //         command: 'npm run dev',
-    //         cwd: '.',
-    //         port: 3000,
-    //         reuseExistingServer: !process.env.CI,
-    //     },
-    //     {
-    //         command: 'npm start',
-    //         cwd: '../backend',
-    //         port: 5000,
-    //         reuseExistingServer: !process.env.CI,
-    //     },
-    // ],
+    webServer: [
+        {
+            command: 'npm run dev',
+            cwd: '.',
+            port: 3000,
+            reuseExistingServer: !process.env.CI,
+            timeout: 120_000,
+        },
+        {
+            command: 'npm start',
+            cwd: '../backend',
+            port: 5000,
+            reuseExistingServer: !process.env.CI,
+            timeout: 120_000,
+        },
+    ],
 });

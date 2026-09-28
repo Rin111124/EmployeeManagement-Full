@@ -7,7 +7,9 @@
     "start": "expo start --port 8083",
     "android": "expo start --android --port 8083",
     "ios": "expo start --ios --port 8083",
-    "web": "expo start --web --port 8083"
+    "web": "expo start --web --port 8083",
+    "lint": "tsc --noEmit",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "2.2.0",
@@ -19,7 +21,7 @@
     "expo-status-bar": "~3.0.9",
     "lucide-react-native": "^1.14.0",
     "react": "19.1.0",
-    "react-dom": "^19.1.0",
+    "react-dom": "19.1.0",
     "react-native": "0.81.5",
     "react-native-safe-area-context": "~5.6.0",
     "react-native-screens": "~4.16.0",

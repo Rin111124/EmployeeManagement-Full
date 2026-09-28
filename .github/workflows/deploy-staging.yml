@@ -27,12 +27,19 @@ jobs:
           cache-dependency-path: |
             admin-system/backend/package-lock.json
             admin-system/frontend/package-lock.json
+            attendance-system/attendance-service/package-lock.json
 
       - name: Backend Tests & Coverage
         working-directory: admin-system/backend
         run: |
           npm ci
           npm run test:coverage
+
+      - name: Attendance Service Tests
+        working-directory: attendance-system/attendance-service
+        run: |
+          npm ci
+          npm test
 
       - name: Frontend Typecheck & Build
         working-directory: admin-system/frontend

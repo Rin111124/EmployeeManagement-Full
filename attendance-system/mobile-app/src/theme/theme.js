@@ -27,6 +27,13 @@ export const Theme = {
       container: '#FFADB6',
       tertiary: '#FF3366', // Thêm màu đỏ HUD từ code gốc
       glow: 'rgba(255, 51, 102, 0.8)',
+    },
+
+    amber: {
+      primary: '#FFFBEB',
+      container: '#F59E0B',
+      dim: '#D97706',
+      glow: 'rgba(245, 158, 11, 0.8)',
     }
   },
   
@@ -53,6 +60,13 @@ export const Glows = {
   },
   red: {
     shadowColor: '#FF3366',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.8,
+    shadowRadius: 10,
+    elevation: 10,
+  },
+  amber: {
+    shadowColor: '#F59E0B',
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.8,
     shadowRadius: 10,

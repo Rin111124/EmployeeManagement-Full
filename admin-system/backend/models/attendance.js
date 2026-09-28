@@ -16,6 +16,12 @@ const attendanceSchema = new Schema(
             index: true,
             default: null,
         },
+        /**
+         * P1-PAY-01 Timezone Convention:
+         * All timestamps (work_date, check_in, check_out) are strictly stored in UTC in MongoDB.
+         * Business logic boundaries and UI formatting convert to/from 'Asia/Ho_Chi_Minh' (UTC+7).
+         * work_date represents the calendar day of the shift in Asia/Ho_Chi_Minh normalized to UTC 00:00:00.
+         */
         work_date: {
             type: Date,
             required: true,

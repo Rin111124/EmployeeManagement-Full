@@ -135,8 +135,8 @@ Dung moi truong staging/development rieng va khong xem day la cau hinh go-live:
 
 ```env
 NODE_ENV=development
-CORS_ORIGIN=http://192.168.1.25:3000
-VITE_API_BASE=http://192.168.1.25:5000/api/v1
+CORS_ORIGIN=https://hr.example.com
+VITE_API_BASE=/api/v1
 COOKIE_SECURE=false
 ```
 
@@ -166,26 +166,20 @@ ai-service           healthy
 admin-frontend       running
 ```
 
-Lan chay dau tien, `ai-service` co the mat vai phut de tai model `buffalo_l`. Model duoc luu trong Docker volume `ai_models`, nen cac lan restart sau se nhanh hon.
+Image `ai-service` tai model `buffalo_l` khi build. Runtime AI container khong can truy cap Internet.
 
 ## 6. Kiem Tra Healthcheck
 
 Thay `SERVER_IP_OR_DOMAIN` bang IP/domain that:
 
 ```text
-http://SERVER_IP_OR_DOMAIN:3000
-http://SERVER_IP_OR_DOMAIN:5000/health
-http://SERVER_IP_OR_DOMAIN:5001/health
-http://SERVER_IP_OR_DOMAIN:8000/
+https://SERVER_IP_OR_DOMAIN/
 ```
 
 Vi du:
 
 ```text
-http://192.168.1.25:3000
-http://192.168.1.25:5000/health
-http://192.168.1.25:5001/health
-http://192.168.1.25:8000/
+https://hr.example.com/
 ```
 
 Neu truy cap tu dien thoai, dam bao dien thoai cung mang LAN hoac truy cap duoc domain public.
@@ -217,10 +211,9 @@ notepad attendance-system\mobile-app\.env
 Vi du server IP la `192.168.1.25`:
 
 ```env
-EXPO_PUBLIC_API_HOST=192.168.1.25
-EXPO_PUBLIC_ADMIN_URL=http://192.168.1.25:5000
-EXPO_PUBLIC_AI_SERVICE_URL=http://192.168.1.25:8000
-EXPO_PUBLIC_ATTENDANCE_URL=http://192.168.1.25:5001/api
+EXPO_PUBLIC_API_HOST=hr.example.com
+EXPO_PUBLIC_ADMIN_URL=https://hr.example.com
+EXPO_PUBLIC_ATTENDANCE_URL=https://hr.example.com/attendance/api
 ```
 
 Build APK:

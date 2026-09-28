@@ -9,7 +9,7 @@
     "newArchEnabled": true,
     "android": {
       "package": "com.employeemanagement.employee",
-      "usesCleartextTraffic": true,
+      "usesCleartextTraffic": false,
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false
     },

@@ -1,4 +1,4 @@
-const { allowedOrigins } = require('../config/cors');
+const { isAllowedOrigin } = require('../config/cors');
 
 const UNSAFE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
@@ -10,14 +10,6 @@ function normalizeOrigin(value) {
     } catch (_error) {
         return null;
     }
-}
-
-function isAllowedOrigin(origin) {
-    if (!origin || allowedOrigins === '*') {
-        return true;
-    }
-
-    return allowedOrigins.includes(origin);
 }
 
 function hasAuthCookie(req) {

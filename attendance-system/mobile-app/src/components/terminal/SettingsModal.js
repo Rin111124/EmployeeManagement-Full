@@ -1,9 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { StyleSheet, View, Text, TextInput, TouchableOpacity, Modal, ScrollView } from 'react-native';
-import { Settings, Server, Fingerprint, Save, X, Activity, Cpu, LayoutGrid, Radio, ShieldCheck, RefreshCw } from 'lucide-react-native';
+import { StyleSheet, View, Text, TextInput, TouchableOpacity, Modal, ScrollView, ActivityIndicator } from 'react-native';
+import { Settings, Server, Fingerprint, Save, X, Activity, Cpu, LayoutGrid, Radio, ShieldCheck, RefreshCw, Wifi, CheckCircle2, AlertCircle, Sparkles } from 'lucide-react-native';
 import * as Network from 'expo-network';
 import { Theme, Glows } from '../../theme/theme';
 import { deviceApi, getDefaultApiConfig, updateApiConfig } from '../../services/api';
+import { discoverServerHost } from '../../services/discovery';
+import { reconnectSocketWithToken } from '../../services/socket';
 
 export default function SettingsModal({ visible, onClose, onSave, onStartRegistration, onOpenAdmin, currentConfig }) {
   const [config, setConfig] = useState(currentConfig || {
@@ -11,7 +13,10 @@ export default function SettingsModal({ visible, onClose, onSave, onStartRegistr
     terminalId: 'CAM-042',
   });
   const [isRequesting, setIsRequesting] = useState(false);
-  const [deviceIp, setDeviceIp] = useState('0.0.0.0');
+  const [isScanning, setIsScanning] = useState(false);
+  const [scanProgress, setScanProgress] = useState('');
+  const [scanResult, setScanResult] = useState(null);
+  const [deviceIp, setDeviceIp] = useState('');
 
   useEffect(() => {
     // Lấy IP thật của thiết bị khi mount
@@ -21,8 +26,64 @@ export default function SettingsModal({ visible, onClose, onSave, onStartRegistr
   useEffect(() => {
     if (visible && currentConfig) {
       setConfig(currentConfig);
+      setScanResult(null);
+      setScanProgress('');
     }
   }, [visible, currentConfig]);
+
+  const handleAutoDiscover = async () => {
+    setIsScanning(true);
+    setScanResult(null);
+    setScanProgress('Đang chuẩn bị quét mạng...');
+
+    try {
+      const result = await discoverServerHost((msg) => setScanProgress(msg));
+      if (result.success && result.host) {
+        const updated = {
+          ...config,
+          adminUrl: result.adminUrl,
+          aiServiceUrl: result.aiServiceUrl,
+          attendanceUrl: result.attendanceUrl,
+        };
+        setConfig(updated);
+        updateApiConfig(updated);
+        setScanResult({
+          success: true,
+          message: `Đã tìm thấy máy chủ tại: ${result.host}`,
+          host: result.host,
+        });
+      } else {
+        setScanResult({
+          success: false,
+          message: result.message || 'Không tìm thấy máy chủ trong mạng LAN.',
+        });
+      }
+    } catch (err) {
+      setScanResult({
+        success: false,
+        message: 'Lỗi trong quá trình quét: ' + err.message,
+      });
+    } finally {
+      setIsScanning(false);
+      setScanProgress('');
+    }
+  };
+
+  const handleUseLocalhost = () => {
+    const updated = {
+      ...config,
+      adminUrl: 'http://localhost:5000',
+      aiServiceUrl: 'http://localhost:8000',
+      attendanceUrl: 'http://localhost:5001/api',
+    };
+    setConfig(updated);
+    updateApiConfig(updated);
+    setScanResult({
+      success: true,
+      message: 'Đã chuyển về địa chỉ localhost (127.0.0.1)',
+      host: 'localhost',
+    });
+  };
 
   const handleRequestAccess = async () => {
     setIsRequesting(true);
@@ -39,7 +100,31 @@ export default function SettingsModal({ visible, onClose, onSave, onStartRegistr
       };
 
       const result = await deviceApi.requestAccess(deviceInfo);
-      alert(result.message || 'Yêu cầu đã được gửi!');
+      const deviceStatus = result?.device?.status;
+
+      if (deviceStatus === 'approved') {
+        // Device đã được approve — thử claim token ngay
+        const deviceId = result?.device?.id;
+        if (deviceId) {
+          const token = await deviceApi.claimToken(deviceId, deviceInfo.device_name);
+          if (token) {
+            await reconnectSocketWithToken(config.adminUrl);
+            alert('Thiết bị đã được xác thực thành công! Ứng dụng sẵn sàng sử dụng.');
+            return;
+          }
+        }
+        alert('Thiết bị đã được duyệt nhưng thiếu thông tin claim cũ. Trong Admin Portal, hãy Revoke thiết bị; sau đó bấm Yêu cầu truy cập trên kiosk và phê duyệt yêu cầu mới.');
+      } else if (deviceStatus === 'pending') {
+        alert(`✅ Yêu cầu đã gửi!
+
+Thiết bị đang chờ phê duyệt. Vui lòng:
+1. Mở Admin Portal (http://localhost:3000)
+2. Vào Quản lý Thiết bị
+3. Phê duyệt thiết bị "${deviceInfo.device_name}"
+4. Quay lại đây và bấm "XÁC THỰC THIẾT BỊ" lần nữa`);
+      } else {
+        alert(result.message || 'Yêu cầu đã được gửi thành công!');
+      }
     } catch (error) {
       alert('Lỗi kết nối: ' + (error.message || 'Không thể kết nối tới Admin Portal'));
     } finally {
@@ -68,11 +153,70 @@ export default function SettingsModal({ visible, onClose, onSave, onStartRegistr
           </View>
 
           <ScrollView contentContainerStyle={styles.scrollContent}>
+            {/* Section: Auto-Discovery */}
+            <View style={[styles.section, styles.highlightSection]}>
+              <View style={styles.sectionHeader}>
+                <Wifi color={Theme.colors.cyan.dim} size={18} />
+                <Text style={[styles.sectionTitle, { color: Theme.colors.cyan.dim }]}>TỰ ĐỘNG TÌM KIẾM IP MÁY CHỦ</Text>
+              </View>
+
+              <Text style={styles.description}>
+                Tự động quét mạng nội bộ (LAN / Wi-Fi) để dò tìm địa chỉ IP máy chủ Backend & Admin đang hoạt động và tự động điền vào cấu hình.
+              </Text>
+
+              <View style={styles.buttonRow}>
+                <TouchableOpacity
+                  style={[styles.actionBtn, styles.scanBtn, { opacity: isScanning ? 0.7 : 1 }]}
+                  onPress={handleAutoDiscover}
+                  disabled={isScanning}
+                >
+                  {isScanning ? (
+                    <ActivityIndicator color={Theme.colors.background} size="small" />
+                  ) : (
+                    <Sparkles color={Theme.colors.background} size={18} />
+                  )}
+                  <Text style={styles.scanBtnText}>
+                    {isScanning ? 'ĐANG QUÉT MẠNG...' : 'DÒ TÌM & TỰ ĐIỀN IP'}
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.actionBtn, styles.localBtn]}
+                  onPress={handleUseLocalhost}
+                  disabled={isScanning}
+                >
+                  <Text style={styles.localBtnText}>DÙNG LOCALHOST</Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Tiến trình quét */}
+              {isScanning && scanProgress ? (
+                <View style={styles.progressBox}>
+                  <ActivityIndicator color={Theme.colors.cyan.dim} size="small" />
+                  <Text style={styles.progressText}>{scanProgress}</Text>
+                </View>
+              ) : null}
+
+              {/* Kết quả quét */}
+              {scanResult ? (
+                <View style={[styles.resultBox, scanResult.success ? styles.resultSuccess : styles.resultError]}>
+                  {scanResult.success ? (
+                    <CheckCircle2 color={Theme.colors.green.container} size={18} />
+                  ) : (
+                    <AlertCircle color="#ff5252" size={18} />
+                  )}
+                  <Text style={[styles.resultText, { color: scanResult.success ? Theme.colors.green.container : '#ff5252' }]}>
+                    {scanResult.message}
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+
             {/* Section: Connection */}
             <View style={styles.section}>
               <View style={styles.sectionHeader}>
                 <Server color={Theme.colors.cyan.container} size={18} />
-                <Text style={styles.sectionTitle}>KẾT NỐI ADMIN</Text>
+                <Text style={styles.sectionTitle}>KẾT NỐI ADMIN (PORT 5000)</Text>
               </View>
 
               <View style={styles.inputGroup}>
@@ -81,7 +225,7 @@ export default function SettingsModal({ visible, onClose, onSave, onStartRegistr
                   style={styles.input}
                   value={config.adminUrl}
                   onChangeText={(text) => setConfig({ ...config, adminUrl: text })}
-                  placeholder="http://..."
+                  placeholder="http://192.168.1.x:5000"
                   placeholderTextColor="#4A4A5F"
                 />
               </View>
@@ -102,7 +246,7 @@ export default function SettingsModal({ visible, onClose, onSave, onStartRegistr
             <View style={styles.section}>
               <View style={styles.sectionHeader}>
                 <Cpu color={Theme.colors.cyan.container} size={18} />
-                <Text style={styles.sectionTitle}>AI SERVICE</Text>
+                <Text style={styles.sectionTitle}>AI SERVICE (PORT 8000)</Text>
               </View>
 
               <View style={styles.inputGroup}>
@@ -111,7 +255,7 @@ export default function SettingsModal({ visible, onClose, onSave, onStartRegistr
                   style={styles.input}
                   value={config.aiServiceUrl}
                   onChangeText={(text) => setConfig({ ...config, aiServiceUrl: text })}
-                  placeholder="http://..."
+                  placeholder="http://192.168.1.x:8000"
                   placeholderTextColor="#4A4A5F"
                 />
               </View>
@@ -133,7 +277,7 @@ export default function SettingsModal({ visible, onClose, onSave, onStartRegistr
             <View style={styles.section}>
               <View style={styles.sectionHeader}>
                 <Activity color={Theme.colors.cyan.container} size={18} />
-                <Text style={styles.sectionTitle}>ATTENDANCE SERVICE</Text>
+                <Text style={styles.sectionTitle}>ATTENDANCE SERVICE (PORT 5001)</Text>
               </View>
               <View style={styles.inputGroup}>
                 <Text style={styles.inputLabel}>ATTENDANCE ENDPOINT</Text>
@@ -141,7 +285,7 @@ export default function SettingsModal({ visible, onClose, onSave, onStartRegistr
                   style={styles.input}
                   value={config.attendanceUrl}
                   onChangeText={(text) => setConfig({ ...config, attendanceUrl: text })}
-                  placeholder="http://.../api"
+                  placeholder="http://192.168.1.x:5001/api"
                   placeholderTextColor="#4A4A5F"
                 />
               </View>
@@ -204,7 +348,7 @@ export default function SettingsModal({ visible, onClose, onSave, onStartRegistr
             {/* System Status Info */}
             <View style={styles.statusBox}>
               <Activity color={Theme.colors.cyan.dim} size={16} />
-              <Text style={styles.statusText}>Hệ thống đang hoạt động ổn định</Text>
+              <Text style={styles.statusText}>IP Thiết bị: {deviceIp || 'Đang dò mạng'} | Sẵn sàng hoạt động</Text>
             </View>
           </ScrollView>
 
@@ -264,6 +408,13 @@ const styles = StyleSheet.create({
   section: {
     gap: 15,
   },
+  highlightSection: {
+    backgroundColor: 'rgba(0, 229, 255, 0.04)',
+    borderWidth: 1,
+    borderColor: 'rgba(0, 229, 255, 0.2)',
+    padding: 15,
+    borderRadius: 4,
+  },
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -277,6 +428,70 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: 'bold',
     letterSpacing: 1,
+  },
+  buttonRow: {
+    flexDirection: 'row',
+    gap: 10,
+    alignItems: 'center',
+  },
+  scanBtn: {
+    flex: 2,
+    backgroundColor: Theme.colors.cyan.dim,
+    ...Glows.cyan,
+  },
+  scanBtnText: {
+    color: Theme.colors.background,
+    fontWeight: '900',
+    fontSize: 13,
+    letterSpacing: 1,
+  },
+  localBtn: {
+    flex: 1,
+    backgroundColor: '#1E1E2A',
+    borderWidth: 1,
+    borderColor: Theme.colors.outlineVariant,
+  },
+  localBtnText: {
+    color: Theme.colors.onSurfaceVariant,
+    fontWeight: '700',
+    fontSize: 11,
+    letterSpacing: 0.5,
+  },
+  progressBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: '#14141F',
+    padding: 10,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 229, 255, 0.3)',
+  },
+  progressText: {
+    color: Theme.colors.cyan.dim,
+    fontSize: 12,
+    fontFamily: 'monospace',
+  },
+  resultBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    padding: 12,
+    borderRadius: 4,
+    borderWidth: 1,
+  },
+  resultSuccess: {
+    backgroundColor: 'rgba(0, 230, 118, 0.1)',
+    borderColor: 'rgba(0, 230, 118, 0.3)',
+  },
+  resultError: {
+    backgroundColor: 'rgba(255, 82, 82, 0.1)',
+    borderColor: 'rgba(255, 82, 82, 0.3)',
+  },
+  resultText: {
+    fontSize: 12,
+    fontWeight: '600',
+    flex: 1,
   },
   inputGroup: {
     gap: 8,
@@ -307,7 +522,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 15,
+    padding: 14,
     gap: 10,
     borderRadius: 2,
     ...Glows.green,

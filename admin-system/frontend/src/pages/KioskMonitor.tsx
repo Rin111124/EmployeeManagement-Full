@@ -66,6 +66,10 @@ export default function KioskMonitor() {
       setLastError(error.message || 'Không kết nối được WebSocket');
     });
 
+    socket.on('kiosk:error', (error: any) => {
+      setLastError(error?.message || 'Bạn không có quyền xem stream camera kiosk.');
+    });
+
     socket.on('kiosk:frame', (payload: KioskFrame) => {
       if (payload?.device_id === id) {
         setFrame(payload);

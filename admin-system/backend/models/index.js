@@ -19,4 +19,6 @@ module.exports = {
     FaceLog: require('./faceLog'),
     Setting: require('./setting'),
     Device: require('./device.model'),
+    InboxEvent: require('./inboxEvent.model'),
+    PayrollAdjustment: require('./payrollAdjustment'),
 };

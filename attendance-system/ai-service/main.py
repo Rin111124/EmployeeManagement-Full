@@ -1,10 +1,41 @@
 import os
 import tempfile
+import asyncio
+import time
+from collections import defaultdict
+from typing import List, Optional
 import numpy as np
-from fastapi import FastAPI, File, HTTPException, Header, UploadFile
+from fastapi import FastAPI, File, HTTPException, Header, UploadFile, Request
 from insightface.app import FaceAnalysis
+from pydantic import BaseModel
 import onnxruntime as ort
 import cv2
+
+# Concurrency control & inference timeout
+MAX_CONCURRENT_INFERENCES = int(os.environ.get("MAX_CONCURRENT_INFERENCES", "3"))
+INFERENCE_TIMEOUT_SECONDS = float(os.environ.get("INFERENCE_TIMEOUT_SECONDS", "10.0"))
+_inference_semaphore = asyncio.Semaphore(MAX_CONCURRENT_INFERENCES)
+
+# Per-device / per-client rate limiting (DoS prevention)
+AI_RATE_LIMIT_REQUESTS = int(os.environ.get("AI_RATE_LIMIT_REQUESTS", "60"))
+AI_RATE_LIMIT_WINDOW_SECONDS = int(os.environ.get("AI_RATE_LIMIT_WINDOW_SECONDS", "60"))
+_request_history = defaultdict(list)
+_rate_limit_lock = asyncio.Lock()
+
+async def _check_rate_limit(client_id: str) -> None:
+    now = time.time()
+    async with _rate_limit_lock:
+        window_start = now - AI_RATE_LIMIT_WINDOW_SECONDS
+        recent = [t for t in _request_history[client_id] if t > window_start]
+        if len(recent) >= AI_RATE_LIMIT_REQUESTS:
+            retry_after = int(recent[0] + AI_RATE_LIMIT_WINDOW_SECONDS - now) + 1
+            raise HTTPException(
+                status_code=429,
+                detail=f"Rate limit exceeded. Maximum {AI_RATE_LIMIT_REQUESTS} requests per {AI_RATE_LIMIT_WINDOW_SECONDS}s.",
+                headers={"Retry-After": str(max(1, retry_after))}
+            )
+        recent.append(now)
+        _request_history[client_id] = recent
 
 app = FastAPI(title="Attendance AI Engine (InsightFace)")
 
@@ -57,24 +88,67 @@ async def root():
         "auth": "api-key" if _AI_API_KEY else "disabled (development)",
     }
 
+MAX_IMAGE_BYTES = 5 * 1024 * 1024  # 5MB
+MAX_PIXEL_DIMENSION = 4096
+ALLOWED_MIME_TYPES = {"image/jpeg", "image/png", "image/pjpeg"}
+ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png"}
+
 @app.post("/extract-features")
 async def extract_features(
+    request: Request,
     file: UploadFile = File(...),
     x_api_key: str = Header(default=""),
+    x_device_id: str = Header(default=""),
 ):
-    """Extract a 512-dim face embedding from an uploaded image.
+    """Extract a 512-dim face embedding from an uploaded image with DoS protection.
 
     Requires the `x-api-key` header to match the `AI_API_KEY` env variable
     when that variable is configured.
     """
     _verify_api_key(x_api_key)
 
-    contents = await file.read()
+    client_id = x_device_id.strip() or (request.client.host if request.client else "unknown")
+    await _check_rate_limit(client_id)
+
+    # Validate MIME type
+    content_type = (file.content_type or "").lower()
+    if content_type and content_type not in ALLOWED_MIME_TYPES:
+        raise HTTPException(
+            status_code=415,
+            detail=f"Unsupported media type: {content_type}. Only JPEG and PNG are allowed."
+        )
+
+    # Validate file extension
+    ext = os.path.splitext(file.filename or "")[1].lower()
+    if ext and ext not in ALLOWED_EXTENSIONS:
+        raise HTTPException(
+            status_code=415,
+            detail=f"Unsupported file extension: {ext}. Only .jpg, .jpeg, and .png are allowed."
+        )
+
+    # Read with size limit to prevent memory exhaustion DoS
+    chunk_size = 64 * 1024
+    total_size = 0
+    chunks = []
+
+    while True:
+        chunk = await file.read(chunk_size)
+        if not chunk:
+            break
+        total_size += len(chunk)
+        if total_size > MAX_IMAGE_BYTES:
+            raise HTTPException(
+                status_code=413,
+                detail=f"File exceeds maximum allowed size of {MAX_IMAGE_BYTES // (1024 * 1024)}MB"
+            )
+        chunks.append(chunk)
+
+    contents = b"".join(chunks)
     if not contents:
         raise HTTPException(status_code=400, detail="Uploaded file is empty")
 
-    # Save to temp file
-    suffix = os.path.splitext(file.filename or ".jpg")[1] or ".jpg"
+    # Save to temp file safely
+    suffix = ext if ext in ALLOWED_EXTENSIONS else ".jpg"
     with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
         tmp.write(contents)
         tmp_path = tmp.name
@@ -83,23 +157,52 @@ async def extract_features(
         # Load image with OpenCV
         img = cv2.imread(tmp_path)
         if img is None:
-            raise HTTPException(status_code=422, detail="Invalid image format")
+            raise HTTPException(status_code=422, detail="Invalid or corrupt image format")
 
-        # Detect faces and extract embeddings
-        faces = face_app.get(img)
+        # Check resolution limits
+        height, width = img.shape[:2]
+        if height > MAX_PIXEL_DIMENSION or width > MAX_PIXEL_DIMENSION:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Image resolution ({width}x{height}) exceeds maximum allowed dimension of {MAX_PIXEL_DIMENSION}px"
+            )
+
+        # Detect faces and extract embeddings with concurrency limit & timeout
+        async with _inference_semaphore:
+            try:
+                faces = await asyncio.wait_for(
+                    asyncio.to_thread(face_app.get, img),
+                    timeout=INFERENCE_TIMEOUT_SECONDS,
+                )
+            except asyncio.TimeoutError:
+                raise HTTPException(
+                    status_code=504,
+                    detail=f"AI inference request timed out after {INFERENCE_TIMEOUT_SECONDS}s"
+                )
 
         if not faces:
-            raise HTTPException(status_code=422, detail="No face detected")
+            raise HTTPException(status_code=422, detail="No face detected in the image")
+
+        # Filter out any face objects with a missing or malformed bounding box.
+        # InsightFace can occasionally return face objects where bbox is None (when
+        # bounding-box estimation fails despite a landmark detection), which would
+        # cause a TypeError when indexing into it during the sort below.
+        faces = [f for f in faces if f.bbox is not None and len(f.bbox) >= 4]
+
+        if not faces:
+            raise HTTPException(status_code=422, detail="No face detected with a valid bounding box")
 
         # Sort by bounding-box area — largest face is closest to the camera
         faces = sorted(
             faces,
-            key=lambda x: (x.bbox[2] - x.bbox[0]) * (x.bbox[3] - x.bbox[1]),
+            key=lambda x: (float(x.bbox[2]) - float(x.bbox[0])) * (float(x.bbox[3]) - float(x.bbox[1])),
             reverse=True,
         )
 
         face = faces[0]
         # InsightFace buffalo_l produces 512-dim normalised embeddings
+        if face.normed_embedding is None:
+            raise HTTPException(status_code=422, detail="Face detected but embedding extraction failed")
         embedding = face.normed_embedding.tolist()
 
         return {
@@ -107,19 +210,19 @@ async def extract_features(
             "embedding": embedding,
             "embedding_size": len(embedding),
             "face_count": len(faces),
-            "face_confidence": float(face.det_score),
+            "face_confidence": float(face.det_score) if face.det_score is not None else 0.0,
             "mode": "insightface-production",
         }
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"AI processing error: {str(e)}")
+        raise HTTPException(status_code=500, detail="AI processing encountered an unexpected error.")
     finally:
         if os.path.exists(tmp_path):
-            os.unlink(tmp_path)
-
-from typing import List, Optional
-from pydantic import BaseModel
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
 
 class MatchRequest(BaseModel):
     query_embedding: List[float]
@@ -128,8 +231,10 @@ class MatchRequest(BaseModel):
 
 @app.post("/compute-match")
 async def compute_match(
+    request_obj: Request,
     request: MatchRequest,
     x_api_key: str = Header(default=""),
+    x_device_id: str = Header(default=""),
 ):
     """Perform vectorized face matching using NumPy.
     
@@ -137,6 +242,9 @@ async def compute_match(
     optimized matrix operations.
     """
     _verify_api_key(x_api_key)
+
+    client_id = x_device_id.strip() or (request_obj.client.host if request_obj.client else "unknown")
+    await _check_rate_limit(client_id)
 
     if not request.candidates:
         return {"success": False, "message": "No candidates provided"}

@@ -145,7 +145,8 @@ async function resolveEmployeeByFace(payload) {
                 candidates,
                 threshold: FACE_SIMILARITY_THRESHOLD
             }, {
-                headers: env.aiApiKey ? { 'x-api-key': env.aiApiKey } : {}
+                headers: env.aiApiKey ? { 'x-api-key': env.aiApiKey } : {},
+                timeout: 5000,
             });
 
             if (aiResponse.data?.match_found) {
@@ -153,13 +154,17 @@ async function resolveEmployeeByFace(payload) {
                 const employee = await Employee.findById(matchedId);
                 if (employee) return employee;
             }
+            // AI responded but no match found — still try manual fallback
+            // (AI threshold may differ; manual sameEmbedding uses same FACE_SIMILARITY_THRESHOLD)
+            logger.warn('[AI_MATCH] AI returned no match, attempting manual fallback');
         } catch (error) {
-            logger.error('[AI_MATCH] Error calling AI service', { error: error.message });
-            // Fallback to manual match if AI service fails (to ensure availability)
-            const matchedCandidate = candidates.find(c => sameEmbedding(c.embedding, payload.face_embedding));
-            if (matchedCandidate) {
-                return Employee.findById(matchedCandidate.id);
-            }
+            logger.warn('[AI_MATCH] AI Service call failed, falling back to manual loop', { error: error.message });
+        }
+
+        // Manual fallback (used when AI service is unavailable OR returned no match)
+        const matchedCandidate = candidates.find(c => sameEmbedding(c.embedding, payload.face_embedding));
+        if (matchedCandidate) {
+            return Employee.findById(matchedCandidate.id);
         }
     }
 

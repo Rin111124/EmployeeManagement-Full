@@ -34,67 +34,78 @@ function getPayrollService() {
  * @property {string|null} error     - error message nếu failed
  */
 
-const worker = new Worker(
-    'payroll',
-    async (job) => {
-        const { employeeIds, month, year, finalize = false, deduction = 0, actorId } = job.data;
+let worker = null;
 
-        if (!Array.isArray(employeeIds) || employeeIds.length === 0) {
-            throw new Error('employeeIds must be a non-empty array');
-        }
+function startPayrollWorker() {
+    if (worker) return worker;
 
-        const payrollService = getPayrollService();
-        const results = [];
-        let succeeded = 0;
-        let failed = 0;
+    worker = new Worker(
+        'payroll',
+        async (job) => {
+            const { employeeIds, month, year, finalize = false, deduction = 0, actorId } = job.data;
 
-        for (let i = 0; i < employeeIds.length; i++) {
-            const employeeId = employeeIds[i];
-            try {
-                const payroll = await payrollService.generatePayroll(
-                    { employee_id: employeeId, month, year, finalize, deduction },
-                    actorId,
-                );
-                results.push({ employeeId, success: true, payroll: payroll?._id });
-                succeeded++;
-            } catch (err) {
-                results.push({ employeeId, success: false, payroll: null, error: err.message });
-                failed++;
-                logger.warn('Payroll generation failed for employee', {
-                    employeeId,
-                    month,
-                    year,
-                    error: err.message,
-                });
+            if (!Array.isArray(employeeIds) || employeeIds.length === 0) {
+                throw new Error('employeeIds must be a non-empty array');
             }
 
-            // Update job progress (0–100)
-            const progress = Math.round(((i + 1) / employeeIds.length) * 100);
-            await job.updateProgress(progress);
-        }
+            const payrollService = getPayrollService();
+            const results = [];
+            let succeeded = 0;
+            let failed = 0;
 
-        const summary = { succeeded, failed, total: employeeIds.length, results };
-        logger.info('Payroll bulk job completed', { jobId: job.id, ...summary });
+            for (let i = 0; i < employeeIds.length; i++) {
+                const employeeId = employeeIds[i];
+                try {
+                    const payroll = await payrollService.generatePayroll(
+                        { employee_id: employeeId, month, year, finalize, deduction },
+                        actorId,
+                    );
+                    results.push({ employeeId, success: true, payroll: payroll?._id });
+                    succeeded++;
+                } catch (err) {
+                    results.push({ employeeId, success: false, payroll: null, error: err.message });
+                    failed++;
+                    logger.warn('Payroll generation failed for employee', {
+                        employeeId,
+                        month,
+                        year,
+                        error: err.message,
+                    });
+                }
 
-        return summary;
-    },
-    {
-        connection: redisOptions,
-        concurrency: 1, // Chỉ chạy 1 bulk job cùng lúc để tránh DB overload
-        lockDuration: 5 * 60 * 1000, // 5 phút lock (generous cho bulk payroll)
-    },
-);
+                // Update job progress (0–100)
+                const progress = Math.round(((i + 1) / employeeIds.length) * 100);
+                await job.updateProgress(progress);
+            }
 
-worker.on('completed', (job, result) => {
-    logger.info('Payroll job completed', { jobId: job.id, result });
-});
+            const summary = { succeeded, failed, total: employeeIds.length, results };
+            logger.info('Payroll bulk job completed', { jobId: job.id, ...summary });
 
-worker.on('failed', (job, err) => {
-    logger.error('Payroll job failed', { jobId: job?.id, error: err.message });
-});
+            return summary;
+        },
+        {
+            connection: redisOptions,
+            concurrency: 1, // Chỉ chạy 1 bulk job cùng lúc để tránh DB overload
+            lockDuration: 5 * 60 * 1000, // 5 phút lock (generous cho bulk payroll)
+        },
+    );
 
-worker.on('error', (err) => {
-    logger.error('Payroll worker error', { error: err.message });
-});
+    worker.on('completed', (job, result) => {
+        logger.info('Payroll job completed', { jobId: job.id, result });
+    });
 
-module.exports = worker;
+    worker.on('failed', (job, err) => {
+        logger.error('Payroll job failed', { jobId: job?.id, error: err.message });
+    });
+
+    worker.on('error', (err) => {
+        logger.error('Payroll worker error', { error: err.message });
+    });
+
+    return worker;
+}
+
+module.exports = {
+    startPayrollWorker,
+    getWorker: () => worker,
+};

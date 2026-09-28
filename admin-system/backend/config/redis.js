@@ -40,9 +40,41 @@ function buildRedisOptions() {
     }
 }
 
+const net = require('net');
+
 const redisOptions = buildRedisOptions();
+
+/**
+ * Kiểm tra xem Redis server có đang lắng nghe kết nối hay không.
+ * Tránh trường hợp BullMQ loop reconnect spam error khi Redis offline.
+ */
+function isRedisAvailable(timeoutMs = 1500) {
+    return new Promise((resolve) => {
+        const socket = net.createConnection({
+            host: redisOptions.host,
+            port: redisOptions.port,
+            timeout: timeoutMs,
+        });
+
+        socket.once('connect', () => {
+            socket.destroy();
+            resolve(true);
+        });
+
+        socket.once('timeout', () => {
+            socket.destroy();
+            resolve(false);
+        });
+
+        socket.once('error', () => {
+            socket.destroy();
+            resolve(false);
+        });
+    });
+}
 
 module.exports = {
     redisOptions,
     redisUrl,
+    isRedisAvailable,
 };

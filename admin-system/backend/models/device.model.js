@@ -29,6 +29,30 @@ const deviceSchema = new mongoose.Schema({
     enum: ['pending', 'approved', 'rejected'],
     default: 'pending'
   },
+  device_id: {
+    type: String,
+    sparse: true,
+    unique: true,
+    trim: true,
+    index: true
+  },
+  bootstrap_hash: {
+    type: String,
+    select: false
+  },
+  enrollment_challenge: {
+    challenge: { type: String, select: false },
+    expires_at: { type: Date, select: false },
+    attempts: { type: Number, default: 0, select: false }
+  },
+  revoked_at: {
+    type: Date,
+    default: null
+  },
+  scopes: {
+    type: [String],
+    default: ['attendance:write', 'biometric:request']
+  },
   can_access_db: {
     type: Boolean,
     default: false

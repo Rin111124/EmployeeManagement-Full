@@ -14,40 +14,33 @@ if (!SYNC_SECRET) {
     );
 }
 
+const { enqueueAttendanceEvent, processOutboxBatch } = require('./outbox.service');
+
 /**
- * Push một attendance record từ attendance-service về admin.
- * Fire-and-forget: caller should .catch() any errors.
+ * Push một attendance record từ attendance-service về admin thông qua Outbox Pattern.
+ * Đảm bảo dữ liệu được lưu bền vững tại local trước, không bị mất khi mạng lỗi.
+ *
+ * Fix 2: No longer wraps in try-catch. If enqueueAttendanceEvent fails (e.g. DB is down),
+ * the error now propagates to the caller (.catch(console.error) in the controller),
+ * making the failure visible instead of silently losing the outbox event.
  */
 async function pushAttendanceToAdmin(record) {
-    if (process.env.NODE_ENV === 'test') {
-        return;
-    }
+    const outboxEvent = await enqueueAttendanceEvent({
+        employee_id: record.employee_id,
+        check_in: record.check_in,
+        check_out: record.check_out,
+        device_id: record.device_id,
+        confidence: record.confidence,
+        method: record.method || 'face',
+    });
 
-    if (!ADMIN_URL || !SYNC_SECRET) {
-        // Already warned at startup — no need to spam per-request logs
-        return;
-    }
+    // Trigger immediate sync asynchronously
+    processOutboxBatch().catch((err) => {
+        console.error('[SYNC_OUTBOX] Immediate sync trigger failed:', err.message);
+    });
 
-    try {
-        await axios.post(`${ADMIN_URL}/attendance/sync-from-device`, {
-            employee_id: record.employee_id,
-            check_in: record.check_in,
-            check_out: record.check_out,
-            device_id: record.device_id,
-            confidence: record.confidence,
-            method: 'face',
-        }, {
-            headers: { 'x-sync-secret': SYNC_SECRET },
-            timeout: 5000,
-        });
-        console.log('[SYNC] Attendance pushed to Admin successfully');
-    } catch (err) {
-        // Không fail khi sync lỗi — local đã lưu rồi
-        console.error('[SYNC] Failed to push to Admin:', err.message);
-        if (err.response && err.response.data) {
-            console.error('[SYNC] Admin Response:', JSON.stringify(err.response.data));
-        }
-    }
+    return outboxEvent;
 }
 
 module.exports = { pushAttendanceToAdmin };
+

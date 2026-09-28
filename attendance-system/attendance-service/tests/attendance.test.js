@@ -157,3 +157,41 @@ test('employee sync restores face embeddings from admin payload', async () => {
     assert.ok(synced);
     assert.equal(synced.face_embedding.length, 512);
 });
+
+test('recognition rejects spoofed attacks when liveness verification fails', async () => {
+    const embedding = unitEmbedding(1);
+
+    await LocalEmployee.create({
+        employee_id: 'emp-live-001',
+        employee_code: 'EMP-LIVE-001',
+        full_name: 'Live Employee',
+        status: 'Active',
+        face_embedding: embedding,
+    });
+
+    // 1. Explicit fake / printed image flag
+    const fakeResponse = await request(app)
+        .post('/api/attendance/recognize')
+        .send({
+            embedding,
+            device_id: 'CAM-001',
+            is_live: false,
+        })
+        .expect(403);
+
+    assert.equal(fakeResponse.body.success, false);
+    assert.equal(fakeResponse.body.code, 'LIVENESS_FAILED');
+
+    // 2. Low liveness score (e.g. 0.45 < 0.70)
+    const lowScoreResponse = await request(app)
+        .post('/api/attendance/recognize')
+        .send({
+            embedding,
+            device_id: 'CAM-001',
+            liveness_score: 0.45,
+        })
+        .expect(403);
+
+    assert.equal(lowScoreResponse.body.success, false);
+    assert.equal(lowScoreResponse.body.code, 'LIVENESS_FAILED');
+});

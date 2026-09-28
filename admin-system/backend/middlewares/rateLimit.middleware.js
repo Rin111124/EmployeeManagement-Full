@@ -35,7 +35,25 @@ const apiLimiter = rateLimit({
     },
 });
 
+/**
+ * Rate limiter cho các endpoint đăng ký và claim token thiết bị.
+ * Giới hạn theo IP và định danh thiết bị để chống brute-force và challenge enumeration.
+ */
+const deviceEnrollmentLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 phút
+    limit: 20,                // 20 requests / 15 phút per device / IP
+    standardHeaders: true,
+    legacyHeaders: false,
+    keyGenerator: (req) => `${ipKeyGenerator(req.ip)}_${req.body?.device_id || req.body?.device_name || 'anon'}`,
+    skip: (req) => req.method === 'OPTIONS' || (process.env.NODE_ENV === 'test' && !req.headers['x-test-rate-limit']),
+    message: {
+        success: false,
+        message: 'Too many device enrollment attempts. Please try again later.',
+    },
+});
+
 module.exports = {
     loginLimiter,
     apiLimiter,
+    deviceEnrollmentLimiter,
 };

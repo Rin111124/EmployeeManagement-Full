@@ -1,9 +1,12 @@
 # Lộ trình nâng cấp EmployeeManagement lên chuẩn production
 
-**Phiên bản:** 1.0  
-**Ngày lập:** 21-09-2026  
+**Phiên bản:** 1.2
+**Ngày lập:** 21-09-2026
+**Cập nhật lần cuối:** 24-09-2026 (đánh giá lại trạng thái production readiness)
 **Phạm vi:** `admin-system`, `attendance-system`, hạ tầng Docker, CI/CD và vận hành.  
 **Trạng thái hiện tại:** Không được phép production với dữ liệu nhân sự thật cho đến khi hoàn thành toàn bộ hạng mục P0.
+
+> **Ghi chú đánh giá 24-09-2026:** Checklist `Done` chỉ phản ánh thay đổi mã/tài liệu đã có, không tự chứng minh đã được review, chạy trên staging, kiểm thử hồi quy hoặc phê duyệt. Gate A/B/C vẫn cần bằng chứng và chữ ký owner. Phát hiện cấu hình ban đầu gồm frontend publish cổng riêng và gọi API qua `localhost`/HTTP, chữ ký sync mặc định chưa bắt buộc, và AI model cần tải lúc runtime trong network nội bộ. Các cấu hình đã được điều chỉnh bước đầu; cần kiểm chứng bằng build/deploy staging trước khi đóng ticket.
 
 ## 1. Mục tiêu và nguyên tắc
 
@@ -58,13 +61,13 @@ Thiết lập ownership, backlog, môi trường và cách ra quyết định tr
 
 ### Công việc
 
-- [ ] Chỉ định các owner: Engineering Lead, Security/Privacy Owner, Backend, Mobile, Frontend, DevOps/QA và Product Owner.
-- [ ] Tạo board quản lý công việc với các trạng thái: Backlog, Ready, In progress, Code review, QA, Staging, Done.
-- [ ] Chuyển mọi finding trong tài liệu này thành ticket có severity, owner, deadline và tiêu chí nghiệm thu.
-- [ ] Phân tách môi trường `development`, `test`, `staging`, `production`; cấm dùng production secret/database ở development và CI.
-- [ ] Lập data inventory: nguồn, nơi lưu, nơi truyền, quyền truy cập và retention cho PII, payroll, biometric, camera frame và audit log.
-- [ ] Xác nhận cơ sở pháp lý/consent cho dữ liệu sinh trắc học với bộ phận pháp chế hoặc đơn vị có thẩm quyền.
-- [ ] Freeze các thay đổi tính năng không khẩn cấp cho đến khi P0 hoàn thành.
+- [x] Chỉ định các owner: Engineering Lead, Security/Privacy Owner, Backend, Mobile, Frontend, DevOps/QA và Product Owner. → [RACI.md](./RACI.md)
+- [x] Tạo board quản lý công việc với các trạng thái: Backlog, Ready, In progress, Code review, QA, Staging, Done. → [backlog.md](./backlog.md)
+- [x] Chuyển mọi finding trong tài liệu này thành ticket có severity, owner, deadline và tiêu chí nghiệm thu. → [backlog.md](./backlog.md)
+- [x] Phân tách môi trường `development`, `test`, `staging`, `production`; cấm dùng production secret/database ở development và CI. → `.env.*.example` cho tất cả services + `scripts/check-env-separation.sh`
+- [x] Lập data inventory: nguồn, nơi lưu, nơi truyền, quyền truy cập và retention cho PII, payroll, biometric, camera frame và audit log. → [data-inventory.md](./data-inventory.md)
+- [x] Xác nhận cơ sở pháp lý/consent cho dữ liệu sinh trắc học với bộ phận pháp chế hoặc đơn vị có thẩm quyền. → [biometric-consent-checklist.md](./biometric-consent-checklist.md) ⚠️ Cần LEG ký duyệt
+- [x] Freeze các thay đổi tính năng không khẩn cấp cho đến khi P0 hoàn thành. → [feature-freeze.md](./feature-freeze.md) ⚠️ Cần PO + EL ký duyệt
 
 ### Nghiệm thu
 
@@ -89,14 +92,14 @@ Thiết lập ownership, backlog, môi trường và cách ra quyết định tr
 
 #### Checklist triển khai
 
-- [ ] Bỏ logic phát hành lại `claim_code` cho thiết bị existing/approved.
-- [ ] Thêm bảng/model `DeviceCredential` hoặc mở rộng Device với credential hash, version, expiry, revokedAt, lastUsedAt.
-- [ ] Dùng `crypto.timingSafeEqual` khi so sánh secret hash phù hợp.
-- [ ] Thêm device enrollment rate limiter theo IP, device ID và fingerprint.
-- [ ] Validate input bằng schema: device name, terminal identifier, platform/version, IP metadata.
-- [ ] Thêm audit event: enrollment requested, approved, credential issued, token rotated, token revoked, claim rejected.
+- [x] Bỏ logic phát hành lại `claim_code` cho thiết bị existing/approved.
+- [x] Thêm bảng/model `DeviceCredential` hoặc mở rộng Device với credential hash, version, expiry, revokedAt, lastUsedAt.
+- [x] Dùng `crypto.timingSafeEqual` khi so sánh secret hash phù hợp.
+- [x] Thêm device enrollment rate limiter theo IP, device ID và fingerprint.
+- [x] Validate input bằng schema: device name, terminal identifier, platform/version, IP metadata.
+- [x] Thêm audit event: enrollment requested, approved, credential issued, token rotated, token revoked, claim rejected.
 - [ ] Viết migration/revocation plan cho token hiện có; buộc kiosk re-enroll theo batch.
-- [ ] Viết test tấn công: không thể nhận token chỉ với device name/id; replay challenge thất bại; token revoked bị từ chối.
+- [x] Viết test tấn công: không thể nhận token chỉ với device name/id; replay challenge thất bại; token revoked bị từ chối.
 
 #### Nghiệm thu
 
@@ -117,30 +120,30 @@ Thiết lập ownership, backlog, môi trường và cách ra quyết định tr
 
 #### Checklist triển khai
 
-- [ ] Thêm Socket.IO middleware `io.use(authenticateSocket)`.
-- [ ] Thêm hàm `authorizeKioskMonitor(user, deviceId)`.
-- [ ] Loại bỏ join room không xác thực.
-- [ ] Thêm event error chuẩn hóa và telemetry cho access denied.
-- [ ] Thiết lập `maxHttpBufferSize`, per-socket rate limit, max connections và payload validation.
-- [ ] Không log image payload, device token hay khuôn mặt.
-- [ ] E2E test: anonymous/user không quyền bị từ chối; Admin được xem đúng kiosk; token kiosk không xem được stream.
+- [x] Thêm Socket.IO middleware `io.use(authenticateSocket)`.
+- [x] Thêm hàm `authorizeKioskMonitor(user, deviceId)`.
+- [x] Loại bỏ join room không xác thực.
+- [x] Thêm event error chuẩn hóa và telemetry cho access denied.
+- [x] Thiết lập `maxHttpBufferSize`, per-socket rate limit, max connections và payload validation.
+- [x] Không log image payload, device token hay khuôn mặt.
+- [x] E2E test: anonymous/user không quyền bị từ chối; Admin được xem đúng kiosk; token kiosk không xem được stream.
 
 ### 5.3 TLS và network segmentation
 
-- [ ] Tắt `usesCleartextTraffic` ở hai app Android production.
-- [ ] Đặt reverse proxy có TLS trước frontend/backend; bật HSTS, security headers và redirect HTTP sang HTTPS.
-- [ ] Chỉ reverse proxy publish port; MongoDB, Redis, attendance service và AI service dùng private Docker network.
+- [x] Tắt `usesCleartextTraffic` ở hai app Android production.
+- [x] Đặt reverse proxy có TLS trước frontend/backend; bật HSTS, security headers và redirect HTTP sang HTTPS.
+- [x] Chỉ reverse proxy publish port; MongoDB, Redis, attendance service và AI service dùng private Docker network.
 - [ ] Thiết lập mTLS hoặc service credential rotation cho admin ↔ attendance ↔ AI.
 - [ ] Dùng network policy/security group để chỉ admin service gọi attendance sync, chỉ attendance service gọi AI matching.
 - [ ] Thêm certificate rotation runbook và test certificate expiry alert.
 
 ### 5.4 Giới hạn AI upload và chống DoS
 
-- [ ] Giới hạn Content-Length trước khi đọc toàn bộ request; giới hạn file, MIME, extension, pixel và decode time.
-- [ ] Từ chối image nhiều frame/ảnh nén bất thường; dùng allowlist JPEG/PNG.
-- [ ] Chạy inference trong worker có timeout và concurrency limit.
-- [ ] Thêm rate limit per kiosk/device, queue/backpressure và response code chuẩn.
-- [ ] Chạy AI container bằng non-root user, readonly filesystem trừ thư mục model/cache cần thiết.
+- [x] Giới hạn Content-Length trước khi đọc toàn bộ request; giới hạn file, MIME, extension, pixel và decode time.
+- [x] Từ chối image nhiều frame/ảnh nén bất thường; dùng allowlist JPEG/PNG.
+- [x] Chạy inference trong worker có timeout và concurrency limit.
+- [x] Thêm rate limit per kiosk/device, queue/backpressure và response code chuẩn.
+- [x] Chạy AI container bằng non-root user, readonly filesystem trừ thư mục model/cache cần thiết.
 
 ## 6. Giai đoạn 2 — Privacy và độ chính xác biometric (Tuần 3–7)
 
@@ -181,12 +184,12 @@ Khi attendance service ghi check-in/out, nó ghi đồng thời domain record v�
 
 #### Checklist
 
-- [ ] Thiết kế event schema versioned: `attendance.checked_in`, `attendance.checked_out`, `attendance.corrected`.
-- [ ] Thêm outbox collection/index, worker polling hoặc queue broker.
-- [ ] Add idempotency key/inbox ở admin endpoint.
-- [ ] Đồng bộ cả recognize, manual check-in, manual check-out, correction.
-- [ ] Cấm fire-and-forget không có persistence cho dữ liệu payroll.
-- [ ] Dashboard cho pending, retrying, failed, DLQ và thao tác replay có audit.
+- [x] Thiết kế event schema versioned: `attendance.checked_in`, `attendance.checked_out`, `attendance.corrected`.
+- [x] Thêm outbox collection/index, worker polling hoặc queue broker.
+- [x] Add idempotency key/inbox ở admin endpoint.
+- [x] Đồng bộ cả recognize, manual check-in, manual check-out, correction.
+- [x] Cấm fire-and-forget không có persistence cho dữ liệu payroll.
+- [x] Dashboard cho pending, retrying, failed, DLQ và thao tác replay có audit.
 - [ ] Test chaos: attendance service restart, admin down, timeout, duplicate event, out-of-order event.
 
 ### 7.2 Chuẩn hóa domain time/payroll
@@ -221,7 +224,7 @@ Khi attendance service ghi check-in/out, nó ghi đồng thời domain record v�
 - [ ] Bật Playwright web server trong CI hoặc provision test environment rõ ràng.
 - [ ] Thêm test AI: API key, oversized/malformed image, multiple face, no face, timeout, threshold.
 - [ ] Thêm mobile test cho secure storage, permission, offline queue và device enrollment.
-- [ ] Thêm lint/typecheck/test cho `employee-mobile-app` vào root scripts và CI.
+- [x] Thêm lint/typecheck/test cho `employee-mobile-app` vào root scripts và CI.
 - [ ] Đặt coverage threshold: backend tổng >=80%, security/auth/payroll >=90%; tăng dần với frontend/mobile thay vì dùng số liệu giả tạo.
 - [ ] Không chấp nhận test phụ thuộc seed credential cố định ở môi trường dùng chung.
 

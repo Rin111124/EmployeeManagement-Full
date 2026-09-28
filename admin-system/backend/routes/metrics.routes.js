@@ -84,17 +84,21 @@ function metricsMiddleware() {
     };
 }
 
+const nativeMetrics = require('../utils/metrics');
+
 // GET /metrics — Prometheus text format
 router.get('/', async (_req, res) => {
-    if (!register) {
-        return res.status(503).send('# Metrics unavailable: prom-client not installed\n');
+    if (register) {
+        try {
+            res.set('Content-Type', register.contentType);
+            return res.end(await register.metrics());
+        } catch (err) {
+            console.error('[Metrics] prom-client collection error, using native fallback:', err.message);
+        }
     }
-    try {
-        res.set('Content-Type', register.contentType);
-        res.end(await register.metrics());
-    } catch (err) {
-        res.status(500).send(`# Error collecting metrics: ${err.message}\n`);
-    }
+
+    res.set('Content-Type', 'text/plain; version=0.0.4; charset=utf-8');
+    res.end(nativeMetrics.generateMetrics());
 });
 
 module.exports = router;

@@ -6,6 +6,7 @@ const requiredInProduction = [
     'JWT_REFRESH_SECRET',
     'CORS_ORIGIN',
     'SYNC_SECRET',
+    'APP_ENCRYPTION_KEY',
 ];
 
 if (process.env.NODE_ENV === 'production') {
@@ -21,6 +22,10 @@ if (process.env.NODE_ENV === 'production') {
 
     if (process.env.COOKIE_SECURE !== 'true') {
         throw new Error('COOKIE_SECURE must be true in production');
+    }
+
+    if (process.env.REQUIRE_SYNC_SIGNATURE !== 'true') {
+        throw new Error('REQUIRE_SYNC_SIGNATURE must be true in production');
     }
 
     if ((process.env.JWT_ACCESS_SECRET || '').length < 32) {
