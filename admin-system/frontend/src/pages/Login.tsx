@@ -135,7 +135,7 @@ export default function Login() {
           </form>
 
           {error && (
-            <div className="text-sm text-rose-600 font-bold text-center">{error}</div>
+            <div role="alert" data-testid="error" className="text-sm text-rose-600 font-bold text-center">{error}</div>
           )}
 
           <p className="text-center text-xs font-bold text-outline">

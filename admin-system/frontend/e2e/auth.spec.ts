@@ -32,13 +32,8 @@ test.describe('Authentication Flow', () => {
 
         // Should stay on login page
         await expect(page).toHaveURL(/\/login/);
-        // Should show an error
-        const errorVisible = await page.locator('[role="alert"], .error, [data-testid="error"]').isVisible()
-            .catch(() => false);
-        // Also accept toast notifications
-        const toastVisible = await page.locator('[class*="toast"], [class*="notification"]').isVisible()
-            .catch(() => false);
-        expect(errorVisible || toastVisible).toBeTruthy();
+        // Should show an error with wait
+        await expect(page.locator('[role="alert"], [data-testid="error"]').first()).toBeVisible({ timeout: 8_000 });
     });
 
     test('non-existent user shows error message', async ({ page }) => {
@@ -62,8 +57,8 @@ test.describe('Authentication Flow', () => {
         await loginAsAdmin(page);
         await expect(page).not.toHaveURL(/\/login/, { timeout: 10_000 });
 
-        // Find and click logout button
-        const logoutBtn = page.getByRole('button', { name: /logout|sign out|đăng xuất/i });
+        // Find and click logout button (use .first() to avoid strict mode collision between topbar & sidebar)
+        const logoutBtn = page.getByRole('button', { name: /logout|sign out|đăng xuất/i }).first();
         await logoutBtn.click();
 
         await expect(page).toHaveURL(/\/login/, { timeout: 8_000 });
