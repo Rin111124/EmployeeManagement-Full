@@ -214,7 +214,11 @@ async function seedDemo() {
 }
 
 if (require.main === module) {
-    seedDemo().catch((error) => {
+    seedDemo()
+        .then(() => {
+            process.exit(0);
+        })
+        .catch((error) => {
         console.error('Failed to seed demo data:', error);
         process.exit(1);
     });
