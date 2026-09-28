@@ -4,9 +4,9 @@ import { test, expect, Page } from '@playwright/test';
 
 async function loginAsAdmin(page: Page) {
     await page.goto('/login');
-    await page.getByLabel(/username/i).fill('admin');
-    await page.getByLabel(/password/i).fill('Admin@123456');
-    await page.getByRole('button', { name: /login|sign in|đăng nhập/i }).click();
+    await page.locator('#username').fill('admin');
+    await page.locator('#password').fill('Admin@123456');
+    await page.locator('button[type="submit"]').click();
     await expect(page).not.toHaveURL(/\/login/, { timeout: 10_000 });
 }
 

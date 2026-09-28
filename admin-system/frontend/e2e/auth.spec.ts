@@ -4,9 +4,9 @@ import { test, expect, Page } from '@playwright/test';
 
 async function loginAs(page: Page, username: string, password: string) {
     await page.goto('/login');
-    await page.getByLabel(/username/i).fill(username);
-    await page.getByLabel(/password/i).fill(password);
-    await page.getByRole('button', { name: /login|sign in|đăng nhập/i }).click();
+    await page.locator('#username').fill(username);
+    await page.locator('#password').fill(password);
+    await page.locator('button[type="submit"]').click();
 }
 
 async function loginAsAdmin(page: Page) {
@@ -26,9 +26,9 @@ test.describe('Authentication Flow', () => {
 
     test('wrong password shows error message', async ({ page }) => {
         await page.goto('/login');
-        await page.getByLabel(/username/i).fill('admin');
-        await page.getByLabel(/password/i).fill('wrong-password-xyz');
-        await page.getByRole('button', { name: /login|sign in|đăng nhập/i }).click();
+        await page.locator('#username').fill('admin');
+        await page.locator('#password').fill('wrong-password-xyz');
+        await page.locator('button[type="submit"]').click();
 
         // Should stay on login page
         await expect(page).toHaveURL(/\/login/);
@@ -43,9 +43,9 @@ test.describe('Authentication Flow', () => {
 
     test('non-existent user shows error message', async ({ page }) => {
         await page.goto('/login');
-        await page.getByLabel(/username/i).fill('nonexistent_user_xyz');
-        await page.getByLabel(/password/i).fill('anypassword');
-        await page.getByRole('button', { name: /login|sign in|đăng nhập/i }).click();
+        await page.locator('#username').fill('nonexistent_user_xyz');
+        await page.locator('#password').fill('anypassword');
+        await page.locator('button[type="submit"]').click();
 
         await expect(page).toHaveURL(/\/login/);
     });
@@ -71,7 +71,7 @@ test.describe('Authentication Flow', () => {
 
     test('empty credentials show validation errors', async ({ page }) => {
         await page.goto('/login');
-        await page.getByRole('button', { name: /login|sign in|đăng nhập/i }).click();
+        await page.locator('button[type="submit"]').click();
 
         // Should still be on login page
         await expect(page).toHaveURL(/\/login/);
