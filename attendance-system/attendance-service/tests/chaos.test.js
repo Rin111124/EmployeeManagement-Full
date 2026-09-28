@@ -18,6 +18,8 @@
 'use strict';
 
 process.env.NODE_ENV = 'test';
+process.env.SYNC_SECRET = process.env.SYNC_SECRET || 'test-sync-secret-at-least-32-chars';
+process.env.ADMIN_URL = process.env.ADMIN_URL || 'http://mock-admin:5000/api/v1';
 process.env.MONGODB_URI = ''; // sẽ bị override bởi MongoMemoryServer
 
 const test = require('node:test');

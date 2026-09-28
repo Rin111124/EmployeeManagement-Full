@@ -22,8 +22,8 @@ const axios = require('axios');
 const env = require('../config/env');
 const AttendanceOutbox = require('../models/AttendanceOutbox');
 
-const ADMIN_URL = env.adminUrl;
-const SYNC_SECRET = env.syncSecret;
+const getAdminUrl = () => process.env.ADMIN_URL || env.adminUrl || 'http://localhost:5000/api/v1';
+const getSyncSecret = () => process.env.SYNC_SECRET || env.syncSecret;
 
 /**
  * Enqueue attendance event into outbox table.
@@ -57,7 +57,9 @@ async function enqueueAttendanceEvent(payload) {
  * Process a batch of pending/retryable outbox events.
  */
 async function processOutboxBatch(batchSize = 10) {
-    if (!ADMIN_URL || !SYNC_SECRET) {
+    const adminUrl = getAdminUrl();
+    const syncSecret = getSyncSecret();
+    if (!adminUrl || !syncSecret) {
         return { processed: 0, errors: 0 };
     }
 
@@ -108,12 +110,12 @@ async function processOutboxBatch(batchSize = 10) {
             };
 
             // P0-TLS-04: Sign request with HMAC timestamp to prevent replay attacks
-            const syncHeaders = SYNC_SECRET
-                ? buildSyncHeaders(SYNC_SECRET, requestBody)
+            const syncHeaders = syncSecret
+                ? buildSyncHeaders(syncSecret, requestBody)
                 : {};
 
             await axios.post(
-                `${ADMIN_URL}/attendance/sync-from-device`,
+                `${adminUrl}/attendance/sync-from-device`,
                 requestBody,
                 {
                     headers: {

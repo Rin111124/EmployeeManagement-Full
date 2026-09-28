@@ -50,6 +50,10 @@ jobs:
           cache-dependency-path: attendance-system/attendance-service/package-lock.json
       - run: npm ci
       - run: npm test
+        env:
+          NODE_ENV: test
+          SYNC_SECRET: ci-sync-secret-value-at-least-32-characters
+          ADMIN_URL: http://localhost:5000/api/v1
 
   frontend:
     name: Admin frontend typecheck + build
@@ -105,6 +109,25 @@ jobs:
     name: Playwright E2E tests
     needs: [admin-backend, frontend]
     runs-on: ubuntu-latest
+    services:
+      mongodb:
+        image: mongo:7
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --eval 'db.adminCommand(\"ping\")'"
+          --health-interval 5s
+          --health-timeout 2s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 2s
+          --health-retries 5
     defaults:
       run:
         working-directory: admin-system/frontend
@@ -122,12 +145,20 @@ jobs:
         run: npm ci
       - name: Install frontend dependencies
         run: npm ci
+      - name: Seed Database for E2E Tests
+        working-directory: admin-system/backend
+        run: npm run seed:demo
+        env:
+          ADMIN_PASSWORD: Admin@123456
+          MONGODB_URI: mongodb://127.0.0.1:27017/employee_management
       - name: Install Playwright Browsers
         run: npx playwright install --with-deps chromium
       - name: Run Playwright tests
         run: npx playwright test
         env:
           CI: 'true'
+          MONGODB_URI: mongodb://127.0.0.1:27017/employee_management
+          REDIS_URL: redis://127.0.0.1:6379
           JWT_ACCESS_SECRET: ci-access-secret-value-at-least-32-characters
           JWT_REFRESH_SECRET: ci-refresh-secret-value-at-least-32-characters
           CORS_ORIGIN: http://localhost:3000
