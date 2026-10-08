@@ -14,6 +14,7 @@
     "test": "node --test --test-concurrency=1 tests/*.test.js",
     "test:coverage": "c8 --reporter=text --reporter=lcov node --test --test-concurrency=1 tests/*.test.js",
     "test:coverage:report": "c8 --reporter=html --reporter=text node --test tests/*.test.js && echo 'Report saved to coverage/'",
+    "test:backup": "node ../../scripts/backup/backup-key.test.mjs",
     "security:smoke": "node scripts/securitySmoke.js",
     "security:env": "node scripts/securityEnvCheck.js",
     "security:test": "npm run security:env && npm run security:smoke",
