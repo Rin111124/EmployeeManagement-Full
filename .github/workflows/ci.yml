@@ -10,6 +10,8 @@ jobs:
   admin-backend:
     name: Admin backend tests + coverage
     runs-on: ubuntu-latest
+    env:
+      TZ: Asia/Ho_Chi_Minh
     defaults:
       run:
         working-directory: packages/backend

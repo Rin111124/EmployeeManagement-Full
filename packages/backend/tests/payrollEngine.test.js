@@ -22,7 +22,7 @@ const PayrollEngine = require('../services/payrollEngine');
  * @param {number} minute 0-59
  */
 function localDate(year, month, day, hour, minute = 0) {
-    return new Date(year, month - 1, day, hour, minute, 0, 0);
+    return new Date(Date.UTC(year, month - 1, day, hour - 7, minute, 0, 0));
 }
 
 const engine = new PayrollEngine();
