@@ -1,0 +1,98 @@
+version: 2
+updates:
+  # GitHub Actions Workflows
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+    labels:
+      - "dependencies"
+      - "ci"
+
+  # Admin Backend
+  - package-ecosystem: "npm"
+    directory: "/admin-system/backend"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    groups:
+      backend-patch-minor:
+        update-types:
+          - "patch"
+          - "minor"
+      backend-dev:
+        dependency-type: "development"
+    labels:
+      - "dependencies"
+      - "backend"
+
+  # Admin Frontend
+  - package-ecosystem: "npm"
+    directory: "/admin-system/frontend"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    groups:
+      frontend-patch-minor:
+        update-types:
+          - "patch"
+          - "minor"
+      frontend-dev:
+        dependency-type: "development"
+    labels:
+      - "dependencies"
+      - "frontend"
+
+  # Attendance Service
+  - package-ecosystem: "npm"
+    directory: "/attendance-system/attendance-service"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    groups:
+      attendance-patch-minor:
+        update-types:
+          - "patch"
+          - "minor"
+    labels:
+      - "dependencies"
+      - "attendance-service"
+
+  # Attendance Kiosk Mobile App
+  - package-ecosystem: "npm"
+    directory: "/attendance-system/mobile-app"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    groups:
+      mobile-patch-minor:
+        update-types:
+          - "patch"
+          - "minor"
+    labels:
+      - "dependencies"
+      - "mobile"
+
+  # AI Service (Python / pip)
+  - package-ecosystem: "pip"
+    directory: "/attendance-system/ai-service"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 3
+    groups:
+      ai-dependencies:
+        patterns:
+          - "*"
+    labels:
+      - "dependencies"
+      - "ai-service"

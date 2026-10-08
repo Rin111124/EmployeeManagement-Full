@@ -10,8 +10,9 @@ services:
       - "80:80"
       - "443:443"
     volumes:
-      - ./deployment/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ${NGINX_CONF_FILE:-./deployment/nginx/nginx.conf}:/etc/nginx/nginx.conf:ro
       - ./deployment/nginx/certs:/etc/nginx/certs:ro
+    mem_limit: 64m
     depends_on:
       admin-frontend:
         condition: service_started
@@ -25,11 +26,13 @@ services:
 
   mongodb:
     image: mongo:7
-    # Do not publish MongoDB in production. Other containers reach it through
-    # the internal Compose network by service name: mongodb.
+    profiles:
+      - with-docker-db
+    # Giới hạn WiredTiger cache ở 256MB để tránh MongoDB ngốn 50% RAM máy
+    command: ["mongod", "--wiredTigerCacheSizeGB", "0.25"]
+    mem_limit: 384m
     volumes:
       - mongo_data:/data/db
-    env_file: .env.docker
     environment:
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USER}
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD}
@@ -44,20 +47,29 @@ services:
 
   admin-backend:
     build: ./admin-system/backend
-    # P0-TLS-05: No direct port exposure — only accessible via nginx reverse proxy
-    # ports:
-    #   - "5000:5000"  # REMOVE: admin-backend must not be directly reachable from host
-    env_file: .env.docker
+    mem_limit: 256m
+    ports:
+      - "127.0.0.1:5000:5000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
-      - MONGODB_URI=mongodb://${MONGO_ROOT_USER}:${MONGO_ROOT_PASSWORD}@mongodb:27017/hrms?authSource=admin
+      - NODE_OPTIONS=--max-old-space-size=192
+      - MONGODB_URI=${MONGODB_URI:-mongodb://host.docker.internal:27017/employee_management}
       - JWT_SECRET=${JWT_SECRET}
       - JWT_ACCESS_SECRET=${JWT_ACCESS_SECRET}
       - JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET}
       - NODE_ENV=${NODE_ENV:-production}
+      - BACKUP_ENCRYPTION_KEY_FILE=/run/secrets/backup_encryption_key
       - CORS_ORIGIN=${CORS_ORIGIN}
       - COOKIE_SECURE=${COOKIE_SECURE}
       - COOKIE_SAME_SITE=${COOKIE_SAME_SITE}
       - SYNC_SECRET=${SYNC_SECRET}
+      - AI_ATTESTATION_SECRET=${AI_ATTESTATION_SECRET}
+      - APP_ENCRYPTION_KEY=${APP_ENCRYPTION_KEY}
+      - APP_ENCRYPTION_KEY_VERSION=${APP_ENCRYPTION_KEY_VERSION:-v1}
+      - APP_ENCRYPTION_KEY_V1=${APP_ENCRYPTION_KEY_V1:-}
+      - APP_ENCRYPTION_KEY_V2=${APP_ENCRYPTION_KEY_V2:-}
+      - ATTENDANCE_SERVICE_URL=${ATTENDANCE_SERVICE_URL:-http://attendance-service:5001/api}
       - AI_SERVICE_URL=http://ai-service:8000
       - AI_API_KEY=${AI_API_KEY}
       - REQUIRE_SYNC_SIGNATURE=${REQUIRE_SYNC_SIGNATURE:-true}
@@ -66,9 +78,12 @@ services:
       - GEMINI_MODEL=${GEMINI_MODEL:-gemini-2.5-pro}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - OPENAI_MODEL=${OPENAI_MODEL:-gpt-5.2}
+    secrets:
+      - backup_encryption_key
     depends_on:
       mongodb:
         condition: service_healthy
+        required: false
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://localhost:5000/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
       interval: 15s
@@ -84,6 +99,7 @@ services:
       args:
         # Browser calls the same origin; nginx forwards /api/v1 to the backend.
         VITE_API_BASE: ${VITE_API_BASE:-/api/v1}
+    mem_limit: 64m
     depends_on:
       admin-backend:
         condition: service_healthy
@@ -93,13 +109,20 @@ services:
 
   ai-service:
     build: ./attendance-system/ai-service
-    # P0-TLS-05: No direct port exposure — only accessible from attendance-service on internal_net
-    # ports:
-    #   - "8000:8000"  # REMOVE: ai-service must not be directly reachable from host
-    env_file: .env.docker
+    mem_limit: 768m
+    ports:
+      - "127.0.0.1:8000:8000"
     environment:
-      - ENVIRONMENT=production
+      - OMP_NUM_THREADS=2
+      - OPENBLAS_NUM_THREADS=2
+      - ENVIRONMENT=${AI_ENVIRONMENT:-development}
       - AI_API_KEY=${AI_API_KEY}
+      - LIVENESS_ENABLED=${LIVENESS_ENABLED:-false}
+      - LIVENESS_MODEL_PATH=/models/liveness.onnx
+      - LIVENESS_THRESHOLD=${LIVENESS_THRESHOLD:-0.80}
+    volumes:
+      # Supply a PAD model whose production use is licensed for your deployment.
+      - ${LIVENESS_MODEL_FILE:-./deployment/secrets/empty.onnx}:/models/liveness.onnx:ro
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8000/"]
       interval: 30s
@@ -111,19 +134,29 @@ services:
 
   attendance-service:
     build: ./attendance-system/attendance-service
-    # P0-TLS-05: No direct port exposure — only accessible via nginx on internal_net
-    # ports:
-    #   - "5001:5001"  # REMOVE: attendance-service must not be directly reachable from host
-    env_file: .env.docker
+    mem_limit: 192m
+    ports:
+      - "127.0.0.1:5001:5001"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
-      - MONGODB_URI=mongodb://${MONGO_ROOT_USER}:${MONGO_ROOT_PASSWORD}@mongodb:27017/attendance?authSource=admin
+      - NODE_OPTIONS=--max-old-space-size=128
+      - MONGODB_URI=${ATTENDANCE_MONGODB_URI:-mongodb://host.docker.internal:27017/attendance}
       - ADMIN_URL=http://admin-backend:5000/api/v1
       - AI_SERVICE_URL=http://ai-service:8000
+      - AI_API_KEY=${AI_API_KEY}
       - SYNC_SECRET=${SYNC_SECRET}
+      - AI_ATTESTATION_SECRET=${AI_ATTESTATION_SECRET}
+      - APP_ENCRYPTION_KEY=${APP_ENCRYPTION_KEY}
+      - APP_ENCRYPTION_KEY_VERSION=${APP_ENCRYPTION_KEY_VERSION:-v1}
+      - APP_ENCRYPTION_KEY_V1=${APP_ENCRYPTION_KEY_V1:-}
+      - APP_ENCRYPTION_KEY_V2=${APP_ENCRYPTION_KEY_V2:-}
       - CORS_ORIGIN=${CORS_ORIGIN}
+      - NODE_ENV=${NODE_ENV:-production}
     depends_on:
       mongodb:
         condition: service_healthy
+        required: false
       admin-backend:
         condition: service_healthy
     healthcheck:
@@ -140,10 +173,12 @@ networks:
     driver: bridge
   internal_net:
     driver: bridge
-    # P0-TLS-05: internal: true prevents containers on this network from making
-    # outbound connections to external networks (internet). They can only reach
-    # each other and the reverse-proxy which bridges both networks.
-    internal: true
+    # Can set internal: true in production air-gapped deployment if no cloud AI is used.
+    internal: ${INTERNAL_NET_IS_INTERNAL:-false}
 
 volumes:
   mongo_data:
+
+secrets:
+  backup_encryption_key:
+    file: ${BACKUP_ENCRYPTION_KEY_FILE:-./deployment/secrets/backup-encryption-key.hex}

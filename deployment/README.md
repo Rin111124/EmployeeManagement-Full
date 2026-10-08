@@ -75,6 +75,15 @@ COOKIE_SECURE=true
 COOKIE_SAME_SITE=lax
 ```
 
+Compose production dung `deployment/nginx/nginx.prod.conf`; truoc khi khoi dong, dat certificate hop le cho domain tai:
+
+```text
+deployment/nginx/certs/fullchain.pem
+deployment/nginx/certs/privkey.pem
+```
+
+Nginx se redirect HTTP sang HTTPS. Neu chua co certificate va private key, reverse proxy production se khong khoi dong. Khong dung self-signed certificate cho kiosk/nhan vien truy cap qua mang that.
+
 Khong commit hoac gui file `.env.docker` that trong goi source code.
 
 ## 2. Khoi Dong He Thong
@@ -86,6 +95,8 @@ docker compose --env-file .env.docker up -d --build
 ```
 
 Image `ai-service` tai model `buffalo_l` khi build. Runtime AI container khong can truy cap Internet.
+
+Production Compose cũng yêu cầu `LIVENESS_MODEL_FILE` trỏ tới file ONNX PAD được cấp quyền sử dụng thương mại; file này được mount chỉ đọc và AI service sẽ từ chối khởi động nếu thiếu. Đặt ngưỡng `LIVENESS_THRESHOLD` sau khi benchmark bằng dữ liệu được phép sử dụng. Không dùng ảnh sắc nét như bằng chứng liveness. Trước khi triển khai, xác minh riêng quyền sử dụng thương mại của cả model nhận diện `buffalo_l` và PAD model; các model InsightFace công khai có điều khoản research-only, nên cần giấy phép phù hợp hoặc thay bằng model đã được cấp phép.
 
 Kiem tra container dang chay:
 
@@ -131,6 +142,7 @@ EXPO_PUBLIC_ADMIN_URL=https://SERVER_IP_OR_DOMAIN
 ```
 
 Khong dung `localhost` khi build APK. Tren dien thoai, `localhost` la chinh dien thoai, khong phai server deployment.
+Production release builds disable Android cleartext traffic and LAN auto-discovery. The Nginx proxy forwards `/attendance/` to the private attendance service; do not configure production kiosks to call ports 5000, 5001, or 8000 directly. Rebuild and install the release after changing these URLs.
 
 ## 5. Dung He Thong
 

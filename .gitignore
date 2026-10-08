@@ -13,6 +13,7 @@ node_modules/
 
 # Secret vaults & key files — never commit these
 secrets/
+deployment/secrets/
 *.pem
 *.key
 *.p12
@@ -65,3 +66,7 @@ uml-diagrams/docx-work/
 Thumbs.db
 .vscode/
 .idea/
+
+# Internal planning, roadmaps, and audit reports
+docs/planning/
+docs/reports/

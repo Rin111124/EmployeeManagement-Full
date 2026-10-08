@@ -14,7 +14,7 @@
 
 <p align="center">
   <b>An Enterprise-Grade, Distributed Human Resource Management System (HRMS) & Biometric Edge Attendance Platform.</b><br/>
-  Featuring Offline-First Edge Kiosks, InsightFace Vector Embeddings, Transactional Outbox DLQ Resilience, and AES-256-GCM Biometric Protection.
+  Featuring Edge Kiosks, InsightFace Vector Embeddings, Transactional Outbox Delivery, and an AES-256-GCM utility for sensitive data.
 </p>
 
 [Key Innovations](#-key-architectural-innovations) •
@@ -32,35 +32,35 @@
 
 **EmployeeManagement** is not just another CRUD human resource tool; it is a full-scale, distributed production platform designed to bridge physical workplace terminals with enterprise-grade cloud management.
 
-Built to address real-world network instability and strict privacy compliance, the platform provides **sub-second biometric facial check-ins** on Android edge kiosks with **guaranteed event delivery** via the Transactional Outbox Pattern, alongside a high-precision **Vietnamese Labor Code payroll calculation engine**.
+Built to address network instability, the platform provides biometric check-ins on Android edge kiosks with retryable event delivery via a transactional outbox, alongside a Vietnamese payroll calculation engine.
 
 ---
 
 ## 🚀 Key Architectural Innovations
 
-### 1. 🤖 AI Facial Recognition & Liveness Defense
-- **512-Dimensional Deep Embeddings**: Powered by **FastAPI** and **InsightFace (MobileFaceNet)** for ultra-fast, robust facial recognition under varying lighting conditions.
-- **Liveness Detection & Anti-Spoofing**: Built-in validation rejecting 2D printed photographs, mobile screen replays, and video spoofs.
-- **Edge Latency**: Under **500ms** total latency from camera frame capture to attendance confirmation.
+### 1. 🤖 Face Recognition
+- **512-Dimensional Face Embeddings**: FastAPI and InsightFace `buffalo_l` extract and compare face embeddings.
+- **Presentation Attack Detection**: Production requires an externally supplied PAD model and fails closed without it. Development can run in quality-only mode; sharpness is not liveness evidence. PAD effectiveness still requires licensed model weights and attack testing before deployment.
+- **Performance**: End-to-end latency has not been benchmarked on the target kiosk hardware; measure it during the staging pilot.
 
-### 2. ⚡ Offline-First Resilience & Transactional Outbox
-- **Network Partition Tolerance**: Kiosk terminals continue operating and recording check-ins even if the local Wi-Fi or central server is completely offline.
-- **Transactional Outbox & DLQ**: Attendance records are committed to a local persistent outbox. A background relay worker syncs events to the central backend using exponential backoff with jitter.
-- **Dead Letter Queue (DLQ)**: Permanently unresolvable sync failures are safely quarantined in a DLQ with manual inspection and one-click replay APIs.
+### 2. ⚡ Attendance Event Delivery
+- The attendance service stores accepted events and an outbox record locally, then retries delivery to the admin backend with backoff.
+- Failed events can enter a dead-letter queue for inspection and replay.
+- The kiosk does not provide verified offline capture when it cannot reach the attendance service; validate network-loss behavior in staging.
 
 ### 3. 💰 Vietnamese Labor Code Payroll Engine
-- **Automated Work-Hour Differentiation**: Automatically splits continuous shift hours into standard hours, night shift differential (`+30%` per Vietnam Labor Code), and tiered overtime (`150%` normal days, `200%` weekends, `300%` statutory holidays).
+- **Work-Hour Calculation**: Splits shift time into configured day/night and overtime categories. Payroll now limits paid overtime to separately approved hours; business calendars, consent, and statutory daily/monthly/yearly limits still need configuration and validation.
 - **Contract Prorating**: Dynamically prorates base salaries and allowances based on active labor contracts and mid-month start dates.
 - **Segregation of Duties (SoD)**: 2-step approval workflow for salary bonuses and deductions, preventing single-user financial tampering.
 
-### 4. 🔐 Military-Grade Biometric Vault (AES-256-GCM)
-- **Encryption at Rest**: Biometric vectors and sensitive Personally Identifiable Information (Citizen IDs, phone numbers) are encrypted using authenticated **AES-256-GCM** with dynamic initialization vectors (`iv`) and verification tags (`authTag`).
-- **Zero-Trust Device Enrollment**: Kiosk devices authenticate using mutual **HMAC-SHA256 challenge-response proofs**. Instant device token revocation cuts off rogue or stolen kiosks within milliseconds.
-- **Regulatory Privacy Compliance**: Fully compliant with **Decree 13/2023/ND-CP** and **GDPR**. Scheduled retention services automatically purge biometric templates upon employee termination.
+### 4. 🔐 Sensitive Data Protection
+- The backend uses AES-256-GCM field encryption for face embeddings, government ID numbers, and bank account numbers. Existing databases must be migrated with the supplied dry-run/apply commands; other employee contact and insurance fields still need a separate data-classification decision.
+- **Device Credentials**: Kiosks use **HMAC-SHA256 challenge-response** during enrollment; issued device credentials can be revoked and are checked by the attendance API.
+- **Retention**: A scheduled task purges biometric templates for terminated employees. This control alone does not establish legal compliance; the privacy checklist requires review against current Vietnamese law and each deployment's data flows.
 
-### 5. 📡 Real-Time Telemetry & Async Worker Queues
-- **Bidirectional WebSockets**: Admin console monitors real-time kiosk heartbeat, online status, battery levels, and live camera feed verification.
-- **Redis BullMQ Workers**: Heavy batch operations (monthly payroll generation, bulk attendance recalculations) are offloaded to background job queues with Sentry tracing.
+### 5. 📡 Operations
+- Socket.IO supports real-time admin events, and health endpoints support service monitoring.
+- Redis/BullMQ runs bulk payroll jobs when Redis is configured; that optional production dependency needs its own availability and recovery monitoring.
 
 ---
 
@@ -86,7 +86,7 @@ flowchart TD
 
     subgraph CentralCloud["Enterprise Central Cloud"]
         Proxy -->|"6. Routed Request"| Backend["⚙️ Admin Backend\n(Express 5 / Node 22)"]
-        Backend -->|"7. Encrypt PII & Biometrics"| Vault["🔐 CryptoVault\n(AES-256-GCM)"]
+        Backend -->|"7. Sensitive data handling"| Vault["🔐 CryptoVault utility\n(AES-256-GCM)"]
         Backend -->|"8. Async Jobs"| Redis[("⚡ Redis 7\n(BullMQ & Token Blacklist)")]
         Backend -->|"9. Persistent Data"| Mongo[("🍃 MongoDB 7\n(HRMS & Audit Logs)")]
         Redis -->|"10. Payroll Worker"| Worker["👷 Payroll Background Worker"]
@@ -160,15 +160,20 @@ cd EmployeeManagement-Full
 # 2. Configure environment
 cp .env.docker.example .env.docker
 
+# Install the domain's TLS certificate and private key:
+# deployment/nginx/certs/fullchain.pem
+# deployment/nginx/certs/privkey.pem
+
 # 3. Build and launch all services
 docker compose --env-file .env.docker up -d --build
 ```
 
 Access the applications:
-- **Admin Portal**: `http://localhost:3000` (or `https://your-domain` via Nginx)
-- **Admin API**: `http://localhost:5000/api/v1`
-- **Attendance Core**: `http://localhost:5001/api`
-- **AI Service**: `http://localhost:8000/docs` (Swagger UI)
+- **Admin Portal**: `https://your-domain`
+- **Admin API**: `https://your-domain/api/v1`
+- **Attendance Core**: `https://your-domain/attendance/api`
+
+The production Compose stack exposes only Nginx on ports 80/443. MongoDB, admin backend, attendance service, and AI service stay on private Docker networks.
 
 ---
 
@@ -228,8 +233,9 @@ bash scripts/check-env-separation.sh
 ```
 
 ### Verified Test Suites Breakdown:
-- **Admin Backend (`node --test`)**: 139 passing tests (Auth, Token family, CryptoVault, Payroll Engine, Kiosk Security, CSRF/XSS, Retention).
+- **Admin Backend (`node --test`)**: 141 passing tests (Auth, Token family, CryptoVault, Payroll Engine, Kiosk Security, CSRF/XSS, Retention).
 - **Attendance Core (`node --test`)**: 37 passing tests (Chaos recovery, Event Idempotency, Outbox DLQ retry, Face Matching).
+- **AI Service (`python -m unittest -v test_ai_service`)**: 11 passing tests (API validation, matching, centroid, and invalid uploads; no real anti-spoof evaluation).
 - **Admin Frontend**: 0 TypeScript compilation errors (`tsc --noEmit`), Playwright E2E ready.
 - **Mobile Kiosks**: 0 ESLint warnings (`expo lint`).
 

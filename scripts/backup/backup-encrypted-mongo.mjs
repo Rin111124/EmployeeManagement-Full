@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+﻿#!/usr/bin/env node
 
 /**
  * scripts/backup/backup-encrypted-mongo.mjs
@@ -15,13 +15,24 @@
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
-import zlib from 'zlib';
-import mongoose from 'mongoose';
+import { createRequire } from 'module';
+import { deriveBackupKey } from './backup-key.mjs';
+import { encryptBackupArchive } from './backup-archive.mjs';
+
+const _require = createRequire(import.meta.url);
+const mongoose = (() => {
+    try { return _require('mongoose'); } catch {
+        try { return _require(path.resolve(process.cwd(), 'packages/backend/node_modules/mongoose')); } catch {
+            return _require('../../packages/backend/node_modules/mongoose');
+        }
+    }
+})();
 
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/employee_management';
-const BACKUP_KEY = process.env.BACKUP_ENCRYPTION_KEY || process.env.APP_ENCRYPTION_KEY || 'default-backup-secure-key-32bytes-min';
 
-async function performBackup() {
+async function performBackup(targetUri = null) {
+    const mongoUri = targetUri || process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/employee_management';
+    const key = deriveBackupKey();
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const outDir = process.env.BACKUP_OUT_DIR || path.join(process.cwd(), 'backups');
 
@@ -29,8 +40,8 @@ async function performBackup() {
         fs.mkdirSync(outDir, { recursive: true });
     }
 
-    console.log(`[BACKUP] Connecting to MongoDB: ${MONGODB_URI}`);
-    await mongoose.connect(MONGODB_URI);
+    console.log(`[BACKUP] Connecting to MongoDB: ${mongoUri}`);
+    await mongoose.connect(mongoUri);
 
     try {
         const collections = await mongoose.connection.db.listCollections().toArray();
@@ -52,23 +63,14 @@ async function performBackup() {
             console.log(`[BACKUP]   - ${name}: ${docs.length} documents`);
         }
 
-        // 1. Serialize & Gzip Compress
+        // 1. Serialize and encrypt using the shared versioned backup format.
         const jsonBuffer = Buffer.from(JSON.stringify(backupData), 'utf8');
-        const compressed = zlib.gzipSync(jsonBuffer);
-
-        // 2. Encrypt using AES-256-GCM
-        const key = crypto.createHash('sha256').update(BACKUP_KEY).digest();
-        const iv = crypto.randomBytes(12);
-        const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
-
-        const encrypted = Buffer.concat([cipher.update(compressed), cipher.final()]);
-        const authTag = cipher.getAuthTag();
+        const encrypted = encryptBackupArchive(jsonBuffer, key);
 
         const archiveFilename = `mongo-backup-${timestamp}.enc`;
         const archivePath = path.join(outDir, archiveFilename);
 
-        // File format: [12 bytes IV][16 bytes AuthTag][Encrypted data]
-        const payload = Buffer.concat([iv, authTag, encrypted]);
+        const payload = encrypted;
         fs.writeFileSync(archivePath, payload);
 
         // 3. Compute Checksum & Metadata
@@ -87,7 +89,7 @@ async function performBackup() {
         const metaPath = path.join(outDir, `mongo-backup-${timestamp}.meta.json`);
         fs.writeFileSync(metaPath, JSON.stringify(metadata, null, 2));
 
-        console.log(`[BACKUP] ✅ Backup completed successfully:`);
+        console.log(`[BACKUP] âœ… Backup completed successfully:`);
         console.log(`[BACKUP]   - Archive: ${archivePath} (${(payload.length / 1024).toFixed(2)} KB)`);
         console.log(`[BACKUP]   - SHA256:  ${checksum}`);
         console.log(`[BACKUP]   - Metadata: ${metaPath}`);
@@ -100,9 +102,10 @@ async function performBackup() {
 
 if (import.meta.url === `file:///${process.argv[1].replace(/\\/g, '/')}`) {
     performBackup().catch((err) => {
-        console.error('[BACKUP] ❌ Backup failed:', err);
+        console.error('[BACKUP] âŒ Backup failed:', err);
         process.exit(1);
     });
 }
 
 export { performBackup };
+

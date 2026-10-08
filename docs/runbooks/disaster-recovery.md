@@ -15,6 +15,9 @@ Dữ liệu MongoDB được sao lưu định kỳ, nén Gzip và mã hóa AES-2
 
 ```bash
 # Thực hiện sao lưu thủ công hoặc qua cron job (mỗi 15 phút)
+# The key must be 32 random bytes encoded as exactly 64 hex characters; store it in a secret manager.
+# Generate once with: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+# Docker Compose reads the key file path from BACKUP_ENCRYPTION_KEY_FILE and mounts the file only into admin-backend.
 BACKUP_ENCRYPTION_KEY="<vault-secret-key>" node scripts/backup/backup-encrypted-mongo.mjs
 ```
 
@@ -55,9 +58,9 @@ Quy trình diễn tập được thực hiện hàng quý trên môi trường s
 5. Trigger worker outbox replay để đồng bộ các sự kiện chấm công đang chờ.
 
 ### Kịch bản 2: AI Service ngừng hoạt động (Outage / Degradation)
-1. `attendance-service` tự động chuyển sang cơ chế fallback (manual matching loop hoặc hàng đợi chờ).
-2. Kiosk app tiếp tục ghi nhận check-in vào hàng đợi offline cục bộ mà không làm gián đoạn việc nhân viên chấm công.
-3. Sau khi AI Service online trở lại, chạy re-sync hoặc batch feature extraction.
+1. If the AI matching endpoint is unavailable, attendance-service may use its bounded local matching fallback; if feature extraction or signed liveness is unavailable, face attendance fails closed.
+2. The kiosk has no durable offline attendance queue and does not persist face embeddings for later submission. Do not represent an offline scan as recorded attendance.
+3. During a feature-extraction outage, use the approved manual attendance correction workflow with a reason, reviewer, and audit record. Resume kiosk use only after AI health and signed PAD checks pass.
 
 ### Kịch bản 3: Token Kiosk bị nghi ngờ lộ / chiếm quyền (Credential Compromise)
 1. Vào Admin Dashboard hoặc chạy script thu hồi:
@@ -72,4 +75,4 @@ Quy trình diễn tập được thực hiện hàng quý trên môi trường s
 1. Khóa API endpoint `/api/registration/match` và cô lập mạng AI service.
 2. Xoay khóa mã hóa `APP_ENCRYPTION_KEY` và mã hóa lại database qua `cryptoVault.js`.
 3. Kiểm tra AuditLog truy vết các request xuất dữ liệu trái phép.
-4. Thông báo cho Privacy & Legal Owner (LEG) theo quy trình tuân thủ GDPR/PDPA.
+4. Thông báo cho Privacy & Legal Owner (LEG) theo quy trình sự cố dữ liệu cá nhân áp dụng tại nơi triển khai.

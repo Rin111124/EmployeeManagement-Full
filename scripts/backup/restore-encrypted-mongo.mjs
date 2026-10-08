@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+﻿#!/usr/bin/env node
 
 /**
  * scripts/backup/restore-encrypted-mongo.mjs
@@ -13,21 +13,30 @@
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
-import zlib from 'zlib';
-import mongoose from 'mongoose';
+import { createRequire } from 'module';
+import { deriveBackupKey } from './backup-key.mjs';
+import { decryptBackupArchive } from './backup-archive.mjs';
+
+const _require = createRequire(import.meta.url);
+const mongoose = (() => {
+    try { return _require('mongoose'); } catch {
+        try { return _require(path.resolve(process.cwd(), 'packages/backend/node_modules/mongoose')); } catch {
+            return _require('../../packages/backend/node_modules/mongoose');
+        }
+    }
+})();
 
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/employee_management';
-const BACKUP_KEY = process.env.BACKUP_ENCRYPTION_KEY || process.env.APP_ENCRYPTION_KEY || 'default-backup-secure-key-32bytes-min';
 
-async function performRestore(archivePath) {
+async function performRestore(archivePath, targetUri = null) {
+    const mongoUri = targetUri || process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/employee_management';
+    const key = deriveBackupKey();
     if (!archivePath || !fs.existsSync(archivePath)) {
         throw new Error(`Archive file not found: ${archivePath}`);
     }
 
     const payload = fs.readFileSync(archivePath);
-    if (payload.length < 28) {
-        throw new Error('Corrupt or invalid backup file: file is too small');
-    }
+    if (payload.length < 33) throw new Error('Corrupt or invalid backup file: file is too small');
 
     // 1. Verify metadata checksum if available
     const metaPath = archivePath.replace(/\.enc$/, '.meta.json');
@@ -40,25 +49,14 @@ async function performRestore(archivePath) {
         console.log(`[RESTORE] Integrity check passed (SHA256 verified).`);
     }
 
-    // 2. Decrypt AES-256-GCM
-    const iv = payload.subarray(0, 12);
-    const authTag = payload.subarray(12, 28);
-    const ciphertext = payload.subarray(28);
-
-    const key = crypto.createHash('sha256').update(BACKUP_KEY).digest();
-    const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
-    decipher.setAuthTag(authTag);
-
-    const compressed = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
-
-    // 3. Decompress JSON
-    const decompressed = zlib.gunzipSync(compressed);
-    const backupData = JSON.parse(decompressed.toString('utf8'));
+    // 2. Authenticate, decrypt, decompress, and parse the versioned archive.
+    const decrypted = decryptBackupArchive(payload, key);
+    const backupData = JSON.parse(decrypted.toString('utf8'));
 
     console.log(`[RESTORE] Archive timestamp: ${backupData.timestamp}`);
-    console.log(`[RESTORE] Target database: ${MONGODB_URI}`);
+    console.log(`[RESTORE] Target database: ${mongoUri}`);
 
-    await mongoose.connect(MONGODB_URI);
+    await mongoose.connect(mongoUri);
     try {
         for (const [colName, docs] of Object.entries(backupData.collections)) {
             const col = mongoose.connection.db.collection(colName);
@@ -68,7 +66,7 @@ async function performRestore(archivePath) {
             }
             console.log(`[RESTORE]   - ${colName}: restored ${docs.length} documents.`);
         }
-        console.log(`[RESTORE] ✅ Restore drill completed successfully.`);
+        console.log(`[RESTORE] âœ… Restore drill completed successfully.`);
     } finally {
         await mongoose.disconnect();
     }
@@ -81,9 +79,10 @@ if (import.meta.url === `file:///${process.argv[1].replace(/\\/g, '/')}`) {
         process.exit(1);
     }
     performRestore(targetArchive).catch((err) => {
-        console.error('[RESTORE] ❌ Restore failed:', err);
+        console.error('[RESTORE] âŒ Restore failed:', err);
         process.exit(1);
     });
 }
 
 export { performRestore };
+

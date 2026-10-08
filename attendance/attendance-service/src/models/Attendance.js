@@ -1,0 +1,43 @@
+const mongoose = require('mongoose');
+
+const attendanceSchema = new mongoose.Schema({
+    employee_id: {
+        type: String,
+        required: true,
+        index: true
+    },
+    device_id: {
+        type: String,
+        required: true
+    },
+    /**
+     * P1-PAY-01 Timezone Convention:
+     * Check-in/check-out timestamps are stored strictly in UTC (Date.now).
+     * Timezone conversion to 'Asia/Ho_Chi_Minh' (UTC+7) is performed at the boundary / admin sync layer.
+     */
+    check_in: {
+        type: Date,
+        default: Date.now
+    },
+    check_out: {
+        type: Date
+    },
+    status: {
+        type: String,
+        enum: ['present', 'late', 'early_leave', 'absent'],
+        default: 'present'
+    },
+    confidence: {
+        type: Number, // AI confidence score
+        min: 0,
+        max: 1
+    },
+    face_log: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'FaceLog'
+    }
+}, {
+    timestamps: true
+});
+
+module.exports = mongoose.model('Attendance', attendanceSchema);
