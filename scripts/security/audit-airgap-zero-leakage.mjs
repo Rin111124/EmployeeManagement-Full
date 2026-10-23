@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env node
+#!/usr/bin/env node
 
 /**
  * scripts/security/audit-airgap-zero-leakage.mjs
@@ -33,51 +33,51 @@ function check(title, fn) {
     }
 }
 
-// 1. Kiá»ƒm tra cáº¥u hÃ¬nh Backend
-check('Backend Chatbot khÃ´ng gá»­i dá»¯ liá»‡u ra Cloud', () => {
-    const backendEnvPath = path.join(rootDir, 'admin-system', 'backend', '.env');
-    if (!fs.existsSync(backendEnvPath)) throw new Error('KhÃ´ng tÃ¬m tháº¥y file packages/backend/.env');
+// 1. Kiểm tra cấu hình Backend
+check('Backend Chatbot không gửi dữ liệu ra Cloud', () => {
+    const backendEnvPath = path.join(rootDir, 'packages', 'backend', '.env');
+    if (!fs.existsSync(backendEnvPath)) throw new Error('Không tìm thấy file packages/backend/.env');
     const content = fs.readFileSync(backendEnvPath, 'utf8');
 
     const matchProvider = content.match(/^CHATBOT_PROVIDER=(.*)$/m);
     const provider = matchProvider ? matchProvider[1].trim() : 'gemini';
     if (!['offline', 'database', 'local', 'ollama'].includes(provider.toLowerCase())) {
-        throw new Error(`CHATBOT_PROVIDER Ä‘ang lÃ  '${provider}'. Pháº£i lÃ  'offline' hoáº·c 'ollama' Ä‘á»ƒ ngÄƒn rÃ² rá»‰ dá»¯ liá»‡u qua Cloud API.`);
+        throw new Error(`CHATBOT_PROVIDER đang là '${provider}'. Phải là 'offline' hoặc 'ollama' để ngăn rò rỉ dữ liệu qua Cloud API.`);
     }
 
     if (provider.toLowerCase() === 'ollama') {
         const matchHost = content.match(/^OLLAMA_HOST=(.*)$/m);
         const host = matchHost ? matchHost[1].trim() : 'http://localhost:11434';
         if (!host.includes('localhost') && !host.includes('127.0.0.1')) {
-            throw new Error(`OLLAMA_HOST Ä‘ang trá» tá»›i host bÃªn ngoÃ i: ${host}`);
+            throw new Error(`OLLAMA_HOST đang trỏ tới host bên ngoài: ${host}`);
         }
     }
 
     const matchGemini = content.match(/^GEMINI_API_KEY=(.*)$/m);
     if (matchGemini && matchGemini[1].trim().length > 10) {
-        throw new Error('GEMINI_API_KEY váº«n cÃ²n chá»©a key hoáº¡t Ä‘á»™ng trong file .env');
+        throw new Error('GEMINI_API_KEY vẫn còn chứa key hoạt động trong file .env');
     }
 
-    return `Äang cháº¡y á»Ÿ cháº¿ Ä‘á»™ '${provider}' cá»¥c bá»™ (Zero Cloud Egress).`;
+    return `Đang chạy ở chế độ '${provider}' cục bộ (Zero Cloud Egress).`;
 });
 
-// 2. Kiá»ƒm tra AI Face Recognition
-check('Dá»‹ch vá»¥ AI nháº­n diá»‡n khuÃ´n máº·t cháº¡y hoÃ n toÃ n On-Premises', () => {
-    const aiServicePath = path.join(rootDir, 'attendance-system', 'ai-service', 'main.py');
-    if (!fs.existsSync(aiServicePath)) throw new Error('KhÃ´ng tÃ¬m tháº¥y file main.py cá»§a AI Service');
+// 2. Kiểm tra AI Face Recognition
+check('Dịch vụ AI nhận diện khuôn mặt chạy hoàn toàn On-Premises', () => {
+    const aiServicePath = path.join(rootDir, 'attendance', 'ai-service', 'main.py');
+    if (!fs.existsSync(aiServicePath)) throw new Error('Không tìm thấy file main.py của AI Service');
     const content = fs.readFileSync(aiServicePath, 'utf8');
 
     if (!content.includes('InsightFace')) {
-        throw new Error('MÃ´ hÃ¬nh khÃ´ng sá»­ dá»¥ng InsightFace offline');
+        throw new Error('Mô hình không sử dụng InsightFace offline');
     }
-    return 'InsightFace Engine hoáº¡t Ä‘á»™ng Ä‘á»™c láº­p trÃªn cá»•ng 8000 ná»™i bá»™, khÃ´ng gá»i cloud.';
+    return 'InsightFace Engine hoạt động độc lập trên cổng 8000 nội bộ, không gọi cloud.';
 });
 
-// 3. Kiá»ƒm tra Telemetry & Sentry
-check('Táº¯t toÃ n bá»™ dá»‹ch vá»¥ thu tháº­p váº¿t (Sentry / Telemetry)', () => {
+// 3. Kiểm tra Telemetry & Sentry
+check('Tắt toàn bộ dịch vụ thu thập vết (Sentry / Telemetry)', () => {
     const envFiles = [
-        path.join(rootDir, 'admin-system', 'backend', '.env'),
-        path.join(rootDir, 'attendance-system', 'attendance-service', '.env'),
+        path.join(rootDir, 'packages', 'backend', '.env'),
+        path.join(rootDir, 'attendance', 'attendance-service', '.env'),
     ];
 
     for (const f of envFiles) {
@@ -85,43 +85,43 @@ check('Táº¯t toÃ n bá»™ dá»‹ch vá»¥ thu tháº­p váº¿t (Sent
             const content = fs.readFileSync(f, 'utf8');
             const matchSentry = content.match(/^SENTRY_DSN=(.*)$/m);
             if (matchSentry && matchSentry[1].trim() !== '') {
-                throw new Error(`PhÃ¡t hiá»‡n SENTRY_DSN Ä‘Æ°á»£c cáº¥u hÃ¬nh táº¡i ${path.relative(rootDir, f)}`);
+                throw new Error(`Phát hiện SENTRY_DSN được cấu hình tại ${path.relative(rootDir, f)}`);
             }
         }
     }
-    return 'ToÃ n bá»™ SENTRY_DSN Ä‘Ã£ Ä‘Æ°á»£c Ä‘á»ƒ trá»‘ng, khÃ´ng gá»­i crash log ra ngoÃ i.';
+    return 'Toàn bộ SENTRY_DSN đã được để trống, không gửi crash log ra ngoài.';
 });
 
-// 4. Kiá»ƒm tra Database Binding
-check('CÆ¡ sá»Ÿ dá»¯ liá»‡u MongoDB chá»‰ liÃªn káº¿t máº¡ng ná»™i bá»™', () => {
-    const backendEnv = fs.readFileSync(path.join(rootDir, 'admin-system', 'backend', '.env'), 'utf8');
-    const attendanceEnv = fs.readFileSync(path.join(rootDir, 'attendance-system', 'attendance-service', '.env'), 'utf8');
+// 4. Kiểm tra Database Binding
+check('Cơ sở dữ liệu MongoDB chỉ liên kết mạng nội bộ', () => {
+    const backendEnv = fs.readFileSync(path.join(rootDir, 'packages', 'backend', '.env'), 'utf8');
+    const attendanceEnv = fs.readFileSync(path.join(rootDir, 'attendance', 'attendance-service', '.env'), 'utf8');
 
     const checkUri = (content, name) => {
         const match = content.match(/^MONGODB_URI=(.*)$/m);
-        if (!match) throw new Error(`Thiáº¿u MONGODB_URI trong ${name}`);
+        if (!match) throw new Error(`Thiếu MONGODB_URI trong ${name}`);
         const uri = match[1].trim();
         if (!uri.includes('127.0.0.1') && !uri.includes('localhost') && !uri.includes('mongodb:27017')) {
-            throw new Error(`${name} Ä‘ang trá» tá»›i Ä‘á»‹a chá»‰ MongoDB ngoÃ i: ${uri}`);
+            throw new Error(`${name} đang trỏ tới địa chỉ MongoDB ngoài: ${uri}`);
         }
         return uri;
     };
 
     checkUri(backendEnv, 'Backend');
     checkUri(attendanceEnv, 'Attendance Service');
-    return 'MongoDB káº¿t ná»‘i an toÃ n tá»›i localhost / Docker internal network.';
+    return 'MongoDB kết nối an toàn tới localhost / Docker internal network.';
 });
 
-// 5. Kiá»ƒm tra cÆ¡ cháº¿ tá»± Ä‘á»™ng xÃ³a áº£nh táº¡m trÃªn Mobile Kiosk
-check('Kiosk Mobile tá»± Ä‘á»™ng xÃ³a vÄ©nh viá»…n áº£nh khuÃ´n máº·t sau trÃ­ch xuáº¥t', () => {
-    const captureServicePath = path.join(rootDir, 'attendance-system', 'mobile-app', 'src', 'services', 'capturePhotoFeatures.js');
-    if (!fs.existsSync(captureServicePath)) throw new Error('KhÃ´ng tÃ¬m tháº¥y capturePhotoFeatures.js');
+// 5. Kiểm tra cơ chế tự động xóa ảnh tạm trên Mobile Kiosk
+check('Kiosk Mobile tự động xóa vĩnh viễn ảnh khuôn mặt sau trích xuất', () => {
+    const captureServicePath = path.join(rootDir, 'attendance', 'mobile-app', 'src', 'services', 'capturePhotoFeatures.js');
+    if (!fs.existsSync(captureServicePath)) throw new Error('Không tìm thấy capturePhotoFeatures.js');
     const content = fs.readFileSync(captureServicePath, 'utf8');
 
     if (!content.includes('deletePhoto(photo.uri)') || !content.includes('Captured face image could not be deleted')) {
-        throw new Error('Thiáº¿u cÆ¡ cháº¿ tá»± Ä‘á»™ng xÃ³a áº£nh táº¡m fail-closed trÃªn Kiosk');
+        throw new Error('Thiếu cơ chế tự động xóa ảnh tạm fail-closed trên Kiosk');
     }
-    return 'CÆ¡ cháº¿ tá»± há»§y áº£nh táº¡m (deletePhoto trong khá»‘i finally) hoáº¡t Ä‘á»™ng fail-closed.';
+    return 'Cơ chế tự hủy ảnh tạm (deletePhoto trong khối finally) hoạt động fail-closed.';
 });
 
 console.log('='.repeat(75));

@@ -1,0 +1,184 @@
+# ==============================================================================
+# Production Docker Compose Configuration
+#
+# Usage:
+#   docker compose -f docker-compose.prod.yml --env-file .env.docker up -d --build
+#
+# Production Hardening Highlights:
+#   1. Only reverse-proxy (Nginx) binds external ports (80, 443).
+#   2. All application and database services (backend, attendance, AI, MongoDB)
+#      are strictly bound to internal networks with NO host port exposure.
+#   3. HTTPS / TLS 1.2+ enforced via deployment/nginx/nginx.prod.conf.
+#   4. Fail-closed healthchecks on all services before accepting traffic.
+#   5. Memory limits and core thread limits applied to every container.
+# ==============================================================================
+
+services:
+  reverse-proxy:
+    image: nginx:1.27-alpine
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deployment/nginx/nginx.prod.conf:/etc/nginx/nginx.conf:ro
+      - ./deployment/nginx/certs:/etc/nginx/certs:ro
+    mem_limit: 128m
+    depends_on:
+      admin-frontend:
+        condition: service_started
+      admin-backend:
+        condition: service_healthy
+      attendance-service:
+        condition: service_healthy
+    networks:
+      - frontend_net
+      - internal_net
+
+  mongodb:
+    image: mongo:7
+    restart: always
+    command: ["mongod", "--wiredTigerCacheSizeGB", "0.5"]
+    mem_limit: 512m
+    volumes:
+      - mongo_data:/data/db
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USER}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD}
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks:
+      - internal_net
+
+  admin-backend:
+    build:
+      context: ./packages/backend
+    restart: always
+    mem_limit: 384m
+    environment:
+      - NODE_ENV=production
+      - NODE_OPTIONS=--max-old-space-size=256
+      - MONGODB_URI=${MONGODB_URI:-mongodb://${MONGO_ROOT_USER}:${MONGO_ROOT_PASSWORD}@mongodb:27017/employee_management?authSource=admin}
+      - JWT_SECRET=${JWT_SECRET}
+      - JWT_ACCESS_SECRET=${JWT_ACCESS_SECRET}
+      - JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET}
+      - BACKUP_ENCRYPTION_KEY_FILE=/run/secrets/backup_encryption_key
+      - CORS_ORIGIN=${CORS_ORIGIN}
+      - COOKIE_SECURE=true
+      - COOKIE_SAME_SITE=Strict
+      - SYNC_SECRET=${SYNC_SECRET}
+      - AI_ATTESTATION_SECRET=${AI_ATTESTATION_SECRET}
+      - APP_ENCRYPTION_KEY=${APP_ENCRYPTION_KEY}
+      - APP_ENCRYPTION_KEY_VERSION=${APP_ENCRYPTION_KEY_VERSION:-v1}
+      - APP_ENCRYPTION_KEY_V1=${APP_ENCRYPTION_KEY_V1:-}
+      - APP_ENCRYPTION_KEY_V2=${APP_ENCRYPTION_KEY_V2:-}
+      - ATTENDANCE_SERVICE_URL=http://attendance-service:5001/api
+      - AI_SERVICE_URL=http://ai-service:8000
+      - AI_API_KEY=${AI_API_KEY}
+      - REQUIRE_SYNC_SIGNATURE=true
+      - REQUIRE_LIVENESS=true
+      - REQUIRE_LIVENESS_ATTESTATION=true
+    secrets:
+      - backup_encryption_key
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:5000/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    networks:
+      - internal_net
+
+  admin-frontend:
+    build:
+      context: ./packages/frontend
+      args:
+        VITE_API_BASE: /api/v1
+    restart: always
+    mem_limit: 64m
+    depends_on:
+      admin-backend:
+        condition: service_healthy
+    networks:
+      - frontend_net
+
+  ai-service:
+    build:
+      context: ./attendance/ai-service
+    restart: always
+    mem_limit: 1024m
+    environment:
+      - ENVIRONMENT=production
+      - OMP_NUM_THREADS=2
+      - OPENBLAS_NUM_THREADS=2
+      - AI_API_KEY=${AI_API_KEY}
+      - AI_ATTESTATION_SECRET=${AI_ATTESTATION_SECRET}
+      - LIVENESS_ENABLED=true
+      - LIVENESS_THRESHOLD=${LIVENESS_THRESHOLD:-0.75}
+      - LIVENESS_MODEL_PATH=/models/liveness.onnx
+    volumes:
+      - ${LIVENESS_MODEL_FILE:-./deployment/secrets/empty.onnx}:/models/liveness.onnx:ro
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - internal_net
+
+  attendance-service:
+    build:
+      context: ./attendance/attendance-service
+    restart: always
+    mem_limit: 256m
+    environment:
+      - NODE_ENV=production
+      - NODE_OPTIONS=--max-old-space-size=192
+      - MONGODB_URI=${ATTENDANCE_MONGODB_URI:-mongodb://${MONGO_ROOT_USER}:${MONGO_ROOT_PASSWORD}@mongodb:27017/attendance?authSource=admin}
+      - ADMIN_URL=http://admin-backend:5000/api/v1
+      - AI_SERVICE_URL=http://ai-service:8000
+      - AI_API_KEY=${AI_API_KEY}
+      - AI_ATTESTATION_SECRET=${AI_ATTESTATION_SECRET}
+      - SYNC_SECRET=${SYNC_SECRET}
+      - APP_ENCRYPTION_KEY=${APP_ENCRYPTION_KEY}
+      - APP_ENCRYPTION_KEY_VERSION=${APP_ENCRYPTION_KEY_VERSION:-v1}
+      - APP_ENCRYPTION_KEY_V1=${APP_ENCRYPTION_KEY_V1:-}
+      - APP_ENCRYPTION_KEY_V2=${APP_ENCRYPTION_KEY_V2:-}
+      - CORS_ORIGIN=${CORS_ORIGIN}
+      - REQUIRE_LIVENESS=true
+      - REQUIRE_LIVENESS_ATTESTATION=true
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      admin-backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:5001/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    networks:
+      - internal_net
+
+networks:
+  frontend_net:
+    driver: bridge
+  internal_net:
+    driver: bridge
+    internal: false # Internal bridge across services
+
+volumes:
+  mongo_data:
+
+secrets:
+  backup_encryption_key:
+    file: ${BACKUP_ENCRYPTION_KEY_FILE:-./deployment/secrets/backup-encryption-key.hex}

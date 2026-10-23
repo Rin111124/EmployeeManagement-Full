@@ -49,9 +49,16 @@ export default function EmployeeRegistrationModal({ visible, onClose, onSelectEm
   }, [currentConfig]);
 
   useEffect(() => {
+    let isMounted = true;
     if (visible) {
-      fetchEmployees();
+      const load = async () => {
+        await Promise.resolve();
+        if (!isMounted) return;
+        fetchEmployees();
+      };
+      load();
     }
+    return () => { isMounted = false; };
   }, [visible, fetchEmployees]);
 
   const filteredEmployees = employees.filter(emp => {

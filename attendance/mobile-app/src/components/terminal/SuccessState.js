@@ -1,76 +1,103 @@
-import React, { useEffect, useRef } from 'react';
-import { StyleSheet, View, Text, Animated, Image, Dimensions, TouchableOpacity } from 'react-native';
-import { BadgeCheck, Clock, Check } from 'lucide-react-native';
-import { Theme, Glows } from '../../theme/theme';
-
-const { width } = Dimensions.get('window');
+import React, { useEffect, useState } from 'react';
+import { StyleSheet, View, Text, Animated, TouchableOpacity, useWindowDimensions } from 'react-native';
+import { Check, CheckCircle2, User, Clock, ShieldCheck } from 'lucide-react-native';
 
 export default function SuccessState({ employee, onReset }) {
-  const scaleAnim = useRef(new Animated.Value(0)).current;
+  const { width, height } = useWindowDimensions();
+  const [scaleAnim] = useState(() => new Animated.Value(0.7));
+  const [opacityAnim] = useState(() => new Animated.Value(0));
+
+  const isLandscape = width > height;
+  const targetOvalHeight = Math.min(Math.max(height * (isLandscape ? 0.35 : 0.38), 190), 320);
+  const targetOvalWidth = Math.min(targetOvalHeight * 0.74, width * 0.72);
 
   useEffect(() => {
-    Animated.spring(scaleAnim, {
-      toValue: 1,
-      tension: 50,
-      friction: 7,
-      useNativeDriver: true,
-    }).start();
+    Animated.parallel([
+      Animated.spring(scaleAnim, {
+        toValue: 1,
+        tension: 65,
+        friction: 8,
+        useNativeDriver: true,
+      }),
+      Animated.timing(opacityAnim, {
+        toValue: 1,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+    ]).start();
 
-    // Tự động quay lại màn hình idle sau 5 giây
+    // Auto reset to idle screen after 2.8 seconds
     const timer = setTimeout(() => {
       onReset();
-    }, 5000);
+    }, 2800);
 
     return () => clearTimeout(timer);
-  }, [onReset, scaleAnim]);
+  }, [onReset, scaleAnim, opacityAnim]);
 
-  const currentTime = new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+  const now = new Date();
+  const timeString = now.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  const dateString = now.toLocaleDateString('vi-VN', { weekday: 'short', day: '2-digit', month: '2-digit' });
 
   return (
     <TouchableOpacity style={styles.container} activeOpacity={1} onPress={onReset}>
-      {/* Profile Section */}
-      <View style={styles.profileSection}>
-        <View style={styles.avatarWrapper}>
-           <Image 
-             source={{ uri: 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png' }}
-             style={styles.avatar}
-           />
-           <Animated.View style={[styles.badgeContainer, { transform: [{ scale: scaleAnim }] }]}>
-              <Check color={Theme.colors.green.container} size={40} strokeWidth={4} />
-           </Animated.View>
+      {/* Success Oval Target Guide */}
+      <View style={styles.faceGuideArea}>
+        <View 
+          style={[
+            styles.ovalFrame,
+            {
+              width: targetOvalWidth,
+              height: targetOvalHeight,
+              borderRadius: targetOvalWidth / 2,
+            }
+          ]}
+        >
+          <Animated.View style={[styles.checkCircleLarge, { transform: [{ scale: scaleAnim }] }]}>
+            <Check color="#FFFFFF" size={42} strokeWidth={3.5} />
+          </Animated.View>
         </View>
       </View>
 
-      {/* Greeting Section */}
-      <View style={styles.greetingSection}>
-        <Text style={styles.greetingText}>
-          CHÀO, <Text style={styles.nameText}>{employee?.full_name || 'NHÂN VIÊN'}!</Text>
-        </Text>
-        
-        <View style={styles.infoBadge}>
-           <View style={[styles.badgeCorner, styles.topLeft]} />
-           <View style={[styles.badgeCorner, styles.bottomRight]} />
-           <Clock color={Theme.colors.outline} size={20} />
-           <Text style={styles.infoText}>XÁC NHẬN CHẤM CÔNG: <Text style={{color: '#FFF'}}>{currentTime}</Text></Text>
-        </View>
+      {/* Modern Glassmorphic Result Card (Clamped max-width) */}
+      <View style={styles.resultCardWrapper}>
+        <Animated.View 
+          style={[
+            styles.resultCard,
+            { 
+              width: Math.min(width * 0.88, 400),
+              opacity: opacityAnim,
+              transform: [{ scale: scaleAnim }]
+            }
+          ]}
+        >
+          <View style={styles.statusHeader}>
+            <ShieldCheck color="#10B981" size={17} />
+            <Text style={styles.statusHeaderText}>ĐIỂM DANH THÀNH CÔNG</Text>
+          </View>
 
-        <View style={styles.statusPill}>
-           <BadgeCheck color={Theme.colors.onSurface} size={20} />
-           <Text style={styles.pillText}>HỆ THỐNG GHI NHẬN</Text>
-        </View>
-      </View>
+          <Text style={styles.employeeName} numberOfLines={1}>
+            {employee?.full_name || 'Nhân Viên'}
+          </Text>
 
-      {/* Terminal Footer */}
-      <View style={styles.terminalInfo}>
-         <View style={styles.infoLeft}>
-            <Text style={styles.debugText}>ID: {employee?.employee_id}</Text>
-            <Text style={styles.debugText}>CONFIDENCE: {employee?.confidence || '99.9%'}</Text>
-            <Text style={[styles.debugText, {color: Theme.colors.green.container}]}>ACCESS GRANTED: SECTOR_MAIN</Text>
-         </View>
-         <View style={styles.infoRight}>
-            <Text style={styles.bigTime}>{currentTime}</Text>
-            <Text style={styles.timezoneText}>LOCAL SYSTEM TIME</Text>
-         </View>
+          <View style={styles.detailsRow}>
+            {employee?.employee_id && (
+              <View style={styles.detailBadge}>
+                <User color="#94A3B8" size={13} />
+                <Text style={styles.detailText}>{employee.employee_id}</Text>
+              </View>
+            )}
+
+            <View style={styles.detailBadge}>
+              <Clock color="#94A3B8" size={13} />
+              <Text style={styles.detailText}>{timeString} • {dateString}</Text>
+            </View>
+          </View>
+
+          <View style={styles.recordedBanner}>
+            <CheckCircle2 color="#10B981" size={15} />
+            <Text style={styles.recordedText}>Đã lưu trữ dữ liệu điểm danh</Text>
+          </View>
+        </Animated.View>
       </View>
     </TouchableOpacity>
   );
@@ -81,129 +108,114 @@ const styles = StyleSheet.create({
     flex: 1,
     width: '100%',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 30,
+    justifyContent: 'space-evenly',
+    paddingVertical: 10,
   },
-  profileSection: {
-    marginTop: 10,
-  },
-  avatarWrapper: {
-    width: width * 0.5,
-    height: width * 0.5,
-    borderRadius: (width * 0.5) / 2,
-    borderWidth: 4,
-    borderColor: Theme.colors.green.container,
-    padding: 5,
-    backgroundColor: '#12121A',
+  faceGuideArea: {
     alignItems: 'center',
     justifyContent: 'center',
-    ...Glows.green,
   },
-  avatar: {
+  ovalFrame: {
+    borderWidth: 3,
+    borderColor: '#10B981',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#10B981',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.7,
+    shadowRadius: 24,
+    elevation: 8,
+  },
+  checkCircleLarge: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: '#10B981',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#10B981',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.6,
+    shadowRadius: 16,
+    elevation: 10,
+  },
+  resultCardWrapper: {
     width: '100%',
-    height: '100%',
-    borderRadius: (width * 0.5) / 2,
-    backgroundColor: '#000',
-  },
-  badgeContainer: {
-    position: 'absolute',
-    bottom: 5,
-    right: 5,
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: '#12121A',
-    borderWidth: 2,
-    borderColor: Theme.colors.green.container,
     alignItems: 'center',
-    justifyContent: 'center',
-    ...Glows.green,
+    paddingBottom: 20,
   },
-  greetingSection: {
-    alignItems: 'center',
-    gap: 15,
-  },
-  greetingText: {
-    color: '#FFF',
-    fontSize: 24,
-    fontWeight: '900',
-    textTransform: 'uppercase',
-    textAlign: 'center',
-  },
-  nameText: {
-    color: Theme.colors.green.container,
-    ...Glows.green,
-  },
-  infoBadge: {
-    backgroundColor: '#1B1B20',
+  resultCard: {
+    backgroundColor: 'rgba(15, 23, 42, 0.92)',
+    borderRadius: 24,
+    paddingVertical: 16,
     paddingHorizontal: 20,
-    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.4)',
+    alignItems: 'center',
+    shadowColor: '#10B981',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.35,
+    shadowRadius: 18,
+    elevation: 10,
+  },
+  statusHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    borderWidth: 1,
-    borderColor: Theme.colors.outlineVariant,
+    gap: 6,
+    marginBottom: 6,
   },
-  badgeCorner: {
-    position: 'absolute',
-    width: 10,
-    height: 10,
-    borderColor: Theme.colors.green.container,
-  },
-  topLeft: { top: 0, left: 0, borderTopWidth: 2, borderLeftWidth: 2 },
-  bottomRight: { bottom: 0, right: 0, borderBottomWidth: 2, borderRightWidth: 2 },
-  infoText: {
-    color: Theme.colors.onSurface,
+  statusHeaderText: {
+    color: '#10B981',
     fontSize: 12,
-    fontFamily: 'monospace',
-    fontWeight: 'bold',
+    fontWeight: '800',
+    letterSpacing: 1,
   },
-  statusPill: {
-    backgroundColor: Theme.colors.green.container,
+  employeeName: {
+    color: '#FFFFFF',
+    fontSize: 20,
+    fontWeight: '800',
+    textAlign: 'center',
+    letterSpacing: 0.3,
+    marginBottom: 8,
+  },
+  detailsRow: {
     flexDirection: 'row',
-    paddingHorizontal: 15,
-    paddingVertical: 6,
-    borderRadius: 20,
     alignItems: 'center',
     gap: 8,
-    ...Glows.green,
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    marginBottom: 10,
   },
-  pillText: {
-    color: Theme.colors.background,
-    fontWeight: 'bold',
-    fontSize: 12,
-    textTransform: 'uppercase',
-  },
-  terminalInfo: {
-    width: '90%',
+  detailBadge: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-end',
-    opacity: 0.6,
-    borderTopWidth: 1,
-    borderTopColor: Theme.colors.outlineVariant,
-    paddingTop: 10,
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.06)',
   },
-  infoLeft: {
-    gap: 2,
+  detailText: {
+    color: '#CBD5E1',
+    fontSize: 12,
+    fontWeight: '600',
   },
-  debugText: {
-    color: Theme.colors.outline,
-    fontSize: 8,
-    fontFamily: 'monospace',
+  recordedBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(16, 185, 129, 0.12)',
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.25)',
   },
-  infoRight: {
-    alignItems: 'flex-end',
+  recordedText: {
+    color: '#34D399',
+    fontSize: 11,
+    fontWeight: '700',
   },
-  bigTime: {
-    color: Theme.colors.onSurfaceVariant,
-    fontSize: 20,
-    fontWeight: 'bold',
-    fontFamily: 'monospace',
-  },
-  timezoneText: {
-    color: Theme.colors.outline,
-    fontSize: 7,
-    fontFamily: 'monospace',
-  }
 });

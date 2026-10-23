@@ -1,7 +1,9 @@
 const LocalEmployee = require('../models/LocalEmployee');
 const axios = require('axios');
 const { cosineSimilarity, validateEmbedding, CONFIDENCE_THRESHOLD } = require('../utils/faceMatching');
+const { encryptJSON, decryptJSON } = require('../utils/cryptoVault');
 const env = require('../config/env');
+
 
 // @desc    Đăng ký khuôn mặt cho nhân viên tại thiết bị
 // @route   POST /api/registration/enroll
@@ -34,16 +36,30 @@ exports.enrollFace = async (req, res) => {
             });
         }
 
-        // 1. Lưu vào Database cục bộ của Hệ thống Chấm công (Tách biệt)
+        // 1. Mã hóa embedding trước khi lưu vào DB (Giai đoạn 2 — P0)
+        let encryptedEmbedding;
+        try {
+            encryptedEmbedding = encryptJSON(embedding);
+        } catch (cryptoErr) {
+            console.error('[enrollFace] Failed to encrypt embedding:', cryptoErr.message);
+            return res.status(500).json({
+                success: false,
+                message: 'Encryption error — cannot store biometric data safely'
+            });
+        }
+
+        // Lưu vào Database cục bộ của Hệ thống Chấm công (Tách biệt)
         const employee = await LocalEmployee.findOneAndUpdate(
             { employee_id },
             {
                 full_name,
-                face_embedding: embedding,
+                face_embedding: encryptedEmbedding, // Encrypted
+                embedding_version: process.env.APP_ENCRYPTION_KEY_VERSION || 'v1',
                 last_sync: Date.now()
             },
             { upsert: true, new: true }
         );
+
 
         console.log(`[Registration] Face enrolled for employee ${employee_id}`);
 
@@ -142,10 +158,12 @@ exports.matchFace = async (req, res) => {
             });
         }
 
-        // Get all enrolled employees with valid face embeddings
+        // Lấy nhân viên Active có embedding (Giai đoạn 2: field là String sau khi encrypt)
         const employees = await LocalEmployee.find({
-            'face_embedding.0': { $exists: true }
+            face_embedding: { $ne: null },
+            status: 'Active',
         }).lean();
+
 
         if (employees.length === 0) {
             return res.status(404).json({
@@ -154,11 +172,17 @@ exports.matchFace = async (req, res) => {
             });
         }
 
-        // Calculate similarity scores
+        // Tính similarity — decrypt embedding trước khi so sánh (Giai đoạn 2)
         const results = employees
             .map((emp) => {
                 try {
-                    const similarity = cosineSimilarity(embedding, emp.face_embedding);
+                    // Decrypt embedding từ DB (encrypted string → [Number])
+                    const storedEmbedding = decryptJSON(emp.face_embedding);
+                    if (!Array.isArray(storedEmbedding)) {
+                        console.warn(`[matchFace] Cannot decrypt embedding for ${emp.employee_id} — skipping`);
+                        return null;
+                    }
+                    const similarity = cosineSimilarity(embedding, storedEmbedding);
                     return {
                         employee_id: emp.employee_id,
                         full_name: emp.full_name,
@@ -171,6 +195,7 @@ exports.matchFace = async (req, res) => {
                 }
             })
             .filter((r) => r !== null);
+
 
         if (results.length === 0) {
             return res.status(500).json({

@@ -174,8 +174,18 @@ const syncFromDevice = asyncHandler(async (req, res) => {
                 event_type: check_out ? 'attendance.checked_out' : 'attendance.checked_in',
                 payload: attendance,
             });
-        } catch (_) {
-            // In case of concurrent replay, duplicate key is handled
+        } catch (err) {
+            if (err.code === 11000) {
+                // Giai đoạn 3: Bắt duplicate key khi có 2 request đồng thời cùng event_id
+                const existing = await InboxEvent.findOne({ event_id });
+                return res.status(200).json({
+                    success: true,
+                    message: 'Event already processed (idempotent)',
+                    data: existing?.payload || attendance,
+                    idempotent: true,
+                });
+            }
+            throw err;
         }
     }
 

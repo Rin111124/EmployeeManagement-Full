@@ -1,36 +1,25 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 import { StyleSheet, View, Text, Animated, TouchableOpacity } from 'react-native';
-import { Camera, Shield, Settings, Wifi, WifiOff, RefreshCw } from 'lucide-react-native';
-import { Theme, Glows } from '../../theme/theme';
+import { ScanFace, Settings, Wifi, WifiOff, RefreshCw } from 'lucide-react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function Header({ 
   status, 
   connectionStatus = 'connected',
   onRetryConnection,
   onOpenSettings, 
-  onStreamFrame, 
-  isStreaming 
 }) {
-  const sweepAnim = useRef(new Animated.Value(-1)).current;
-  const pulseAnim = useRef(new Animated.Value(0.5)).current;
-  const spinAnim = useRef(new Animated.Value(0)).current;
+  const insets = useSafeAreaInsets();
+  const [pulseAnim] = useState(() => new Animated.Value(0.6));
+  const [spinAnim] = useState(() => new Animated.Value(0));
 
   const isConnected = connectionStatus === 'connected';
   const isConnecting = connectionStatus === 'connecting';
   const isDisconnected = connectionStatus === 'disconnected';
 
   useEffect(() => {
-    // Sweep animation for the decorative line
-    Animated.loop(
-      Animated.timing(sweepAnim, {
-        toValue: 2,
-        duration: 3000,
-        useNativeDriver: true,
-      })
-    ).start();
-
-    // Pulse animation for the status dot (faster if disconnected or connecting)
-    const pulseDuration = isDisconnected ? 500 : isConnecting ? 700 : 1200;
+    // Soft pulsing animation for connection indicator
+    const pulseDuration = isDisconnected ? 600 : isConnecting ? 800 : 1800;
     const pulseLoop = Animated.loop(
       Animated.sequence([
         Animated.timing(pulseAnim, { toValue: 1, duration: pulseDuration, useNativeDriver: true }),
@@ -39,7 +28,7 @@ export default function Header({
     );
     pulseLoop.start();
 
-    // Spin animation for connecting icon
+    // Spinner animation for connecting status
     let spinLoop;
     if (isConnecting) {
       spinLoop = Animated.loop(
@@ -58,216 +47,187 @@ export default function Header({
       pulseLoop.stop();
       if (spinLoop) spinLoop.stop();
     };
-  }, [pulseAnim, sweepAnim, spinAnim, connectionStatus, isDisconnected, isConnecting]);
-
-  const sweepTranslateX = sweepAnim.interpolate({
-    inputRange: [-1, 2],
-    outputRange: [-200, 500],
-  });
+  }, [pulseAnim, spinAnim, connectionStatus, isDisconnected, isConnecting]);
 
   const spin = spinAnim.interpolate({
     inputRange: [0, 1],
     outputRange: ['0deg', '360deg'],
   });
 
-  // Color mapping based on connection state
   const statusColor = isConnected 
-    ? Theme.colors.green.container 
+    ? '#10B981' // Emerald
     : isConnecting 
-      ? Theme.colors.amber.container 
-      : Theme.colors.red.tertiary;
-
-  const statusGlow = isConnected 
-    ? Glows.green 
-    : isConnecting 
-      ? Glows.amber 
-      : Glows.red;
+      ? '#F59E0B' // Amber
+      : '#EF4444'; // Rose
 
   const statusBg = isConnected
-    ? 'rgba(52, 255, 141, 0.08)'
+    ? 'rgba(16, 185, 129, 0.12)'
     : isConnecting
-      ? 'rgba(245, 158, 11, 0.12)'
-      : 'rgba(255, 51, 102, 0.15)';
+      ? 'rgba(245, 158, 11, 0.15)'
+      : 'rgba(239, 68, 68, 0.15)';
 
-  const statusBorderColor = isConnected
-    ? 'rgba(52, 255, 141, 0.3)'
+  const statusBorder = isConnected
+    ? 'rgba(16, 185, 129, 0.25)'
     : isConnecting
-      ? 'rgba(245, 158, 11, 0.4)'
-      : 'rgba(255, 51, 102, 0.5)';
+      ? 'rgba(245, 158, 11, 0.3)'
+      : 'rgba(239, 68, 68, 0.3)';
 
   const displayLabel = isConnected 
-    ? (status || 'ONLINE')
+    ? (status === 'SCANNING...' ? 'ĐANG QUÉT' : 'TRỰC TUYẾN')
     : isConnecting 
-      ? 'KẾT NỐI...' 
+      ? 'ĐANG KẾT NỐI' 
       : 'MẤT KẾT NỐI';
 
   return (
-    <View style={styles.header}>
-      {/* Decorative Sweep Line */}
-      <Animated.View 
-        style={[
-          styles.sweepLine, 
-          { transform: [{ translateX: sweepTranslateX }] }
-        ]} 
-      />
+    <View style={[styles.headerContainer, { paddingTop: Math.max(insets.top + 8, 16) }]}>
+      <View style={styles.header}>
+        {/* Brand / Title */}
+        <View style={styles.leftSection}>
+          <View style={styles.logoBadge}>
+            <ScanFace color="#38BDF8" size={22} />
+          </View>
+          <View style={styles.titleWrapper}>
+            <Text style={styles.brandTitle} numberOfLines={1}>SECURE KIOSK</Text>
+            <Text style={styles.brandSubtitle} numberOfLines={1}>Điểm Danh Khuôn Mặt AI</Text>
+          </View>
+        </View>
 
-      <View style={styles.leftSection}>
-        <Shield 
-          color={Theme.colors.cyan.dim} 
-          size={28} 
-          fill={Theme.colors.cyan.dim} 
-        />
-        <Text style={styles.brandText}>SECURE-ID</Text>
-      </View>
-
-      <View style={styles.rightSection}>
-        {/* Status Pill Badge - Clickable to reconnect */}
-        <TouchableOpacity 
-          style={[
-            styles.statusBadge, 
-            { backgroundColor: statusBg, borderColor: statusBorderColor },
-            statusGlow
-          ]}
-          onPress={onRetryConnection}
-          activeOpacity={0.7}
-        >
-          {isConnected && <Wifi size={13} color={statusColor} />}
-          {isConnecting && (
-            <Animated.View style={{ transform: [{ rotate: spin }] }}>
-              <RefreshCw size={13} color={statusColor} />
-            </Animated.View>
-          )}
-          {isDisconnected && <WifiOff size={13} color={statusColor} />}
-
-          <Animated.View 
+        {/* Status & Actions */}
+        <View style={styles.rightSection}>
+          {/* Status Pill Badge */}
+          <TouchableOpacity 
             style={[
-              styles.statusDot, 
-              { backgroundColor: statusColor, opacity: pulseAnim }
-            ]} 
-          />
-          <Text style={[styles.statusLabel, { color: statusColor }]}>{displayLabel}</Text>
-        </TouchableOpacity>
-
-        <View style={styles.divider} />
-        <Text style={styles.dateText}>
-          {new Date().toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' })}
-        </Text>
-        <TouchableOpacity onPress={onOpenSettings} style={styles.settingsBtn}>
-          <Settings color={Theme.colors.onSurfaceVariant} size={20} />
-        </TouchableOpacity>
-        {onStreamFrame && (
-          <TouchableOpacity
-            onPress={onStreamFrame}
-            disabled={isStreaming}
-            style={[styles.streamBtn, isStreaming && styles.streamBtnDisabled]}
+              styles.statusBadge, 
+              { backgroundColor: statusBg, borderColor: statusBorder }
+            ]}
+            onPress={onRetryConnection}
+            activeOpacity={0.7}
           >
-            <Camera color={Theme.colors.cyan.container} size={16} />
-            <Text style={styles.streamText}>{isStreaming ? 'SENDING' : 'STREAM'}</Text>
+            {isConnected && <Wifi size={13} color={statusColor} />}
+            {isConnecting && (
+              <Animated.View style={{ transform: [{ rotate: spin }] }}>
+                <RefreshCw size={13} color={statusColor} />
+              </Animated.View>
+            )}
+            {isDisconnected && <WifiOff size={13} color={statusColor} />}
+
+            <Animated.View 
+              style={[
+                styles.statusDot, 
+                { backgroundColor: statusColor, opacity: pulseAnim }
+              ]} 
+            />
+            <Text style={[styles.statusLabel, { color: statusColor }]}>{displayLabel}</Text>
           </TouchableOpacity>
-        )}
+
+          {/* Settings Button - High Contrast & Guaranteed Visible */}
+          <TouchableOpacity 
+            onPress={onOpenSettings} 
+            style={styles.settingsBtn}
+            activeOpacity={0.7}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+          >
+            <Settings color="#38BDF8" size={20} />
+          </TouchableOpacity>
+        </View>
       </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  header: {
+  headerContainer: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
-    height: 90,
-    paddingTop: 40,
-    paddingHorizontal: 20,
+    zIndex: 999,
+    elevation: 40,
+    paddingHorizontal: 16,
+    paddingBottom: 8,
+  },
+  header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: Theme.colors.background,
-    borderBottomWidth: 1,
-    borderBottomColor: Theme.colors.outlineVariant,
-    zIndex: 100,
-  },
-  sweepLine: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    width: 150,
-    height: 1,
-    backgroundColor: Theme.colors.cyan.dim,
-    opacity: 0.5,
-    ...Glows.cyan,
+    backgroundColor: 'rgba(15, 23, 42, 0.88)',
+    borderRadius: 20,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35,
+    shadowRadius: 12,
+    elevation: 8,
   },
   leftSection: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
+    marginRight: 8,
   },
-  brandText: {
-    color: Theme.colors.cyan.dim,
-    fontSize: 18,
+  titleWrapper: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  logoBadge: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: 'rgba(56, 189, 248, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(56, 189, 248, 0.25)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  brandTitle: {
+    color: '#FFFFFF',
+    fontSize: 14,
     fontWeight: '800',
-    letterSpacing: 2,
-    textTransform: 'uppercase',
-    ...Glows.cyan,
+    letterSpacing: 0.8,
+  },
+  brandSubtitle: {
+    color: '#94A3B8',
+    fontSize: 11,
+    fontWeight: '500',
+    marginTop: 1,
   },
   rightSection: {
+    flexShrink: 0,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 15,
+    gap: 8,
   },
   statusBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    paddingHorizontal: 9,
-    paddingVertical: 5,
-    borderRadius: 14,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 20,
     borderWidth: 1,
   },
   statusDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 3.5,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
   },
   statusLabel: {
     fontSize: 11,
-    fontWeight: 'bold',
-    fontFamily: 'monospace',
-    letterSpacing: 0.8,
-  },
-  divider: {
-    width: 1,
-    height: 20,
-    backgroundColor: Theme.colors.outlineVariant,
-  },
-  dateText: {
-    color: Theme.colors.onSurfaceVariant,
-    fontSize: 12,
-    fontFamily: 'monospace',
-    letterSpacing: 1,
+    fontWeight: '700',
+    letterSpacing: 0.3,
   },
   settingsBtn: {
-    padding: 5,
-    marginLeft: 5,
-  },
-  streamBtn: {
-    flexDirection: 'row',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(56, 189, 248, 0.15)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(56, 189, 248, 0.4)',
     alignItems: 'center',
-    gap: 6,
-    borderWidth: 1,
-    borderColor: Theme.colors.cyan.container,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    backgroundColor: 'rgba(34, 211, 238, 0.08)',
+    justifyContent: 'center',
   },
-  streamBtnDisabled: {
-    opacity: 0.5,
-  },
-  streamText: {
-    color: Theme.colors.cyan.container,
-    fontSize: 10,
-    fontWeight: 'bold',
-    fontFamily: 'monospace',
-    letterSpacing: 1,
-  }
 });

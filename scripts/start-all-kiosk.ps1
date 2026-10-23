@@ -108,7 +108,30 @@ Write-Host ""
 # BUOC 4: BUILD VA CHAY KIOSK MOBILE APP TREN MAY AO
 # -----------------------------------------------------------------
 Write-Host "[4/4] Khoi chay Kiosk Cham Cong (mobile-app)..." -ForegroundColor Yellow
-Write-Host "Ung dung se duoc tu dong cai dat va mo tren may ao." -ForegroundColor DarkGray
-Write-Host ""
 
-npm --prefix attendance-system/mobile-app run android
+$mobileAppDir = Join-Path $ProjectRoot "attendance\mobile-app"
+$expoCmd = Join-Path $mobileAppDir "node_modules\.bin\expo.cmd"
+if (-not (Test-Path $expoCmd)) {
+    Write-Host "Dang cai dat dependencies cho mobile-app..." -ForegroundColor DarkGray
+    npm --prefix attendance/mobile-app install --legacy-peer-deps
+}
+
+$metroListening = Get-NetTCPConnection -LocalPort 8082 -State Listen -ErrorAction SilentlyContinue
+$isInstalled = (& adb shell pm list packages com.employeemanagement.kiosk 2>$null) -match "com.employeemanagement.kiosk"
+
+if ($isInstalled) {
+    Write-Host " Kiosk app da co tren may ao. Dang mo ung dung..." -ForegroundColor Green
+    & adb shell am start -n com.employeemanagement.kiosk/.MainActivity | Out-Null
+    
+    if ($metroListening) {
+        Write-Host " Metro Bundler da dang chay tren port 8082!" -ForegroundColor Green
+        Write-Host " Kiosk Cham Cong da san sang tren may ao!" -ForegroundColor Green
+    } else {
+        Write-Host "Dang khoi chay Metro Bundler (port 8082)..." -ForegroundColor Cyan
+        npm --prefix attendance/mobile-app run start
+    }
+} else {
+    Write-Host "Kiosk app chua cai dat tren may ao. Tien hanh build va cai dat..." -ForegroundColor Yellow
+    npm --prefix attendance/mobile-app run android
+}
+

@@ -12,7 +12,15 @@ function parseAllowedOrigins(value) {
         .filter(Boolean);
 }
 
-const requiredInProduction = ['MONGODB_URI', 'ADMIN_URL', 'SYNC_SECRET', 'CORS_ORIGIN'];
+const requiredInProduction = [
+    'MONGODB_URI',
+    'ADMIN_URL',
+    'SYNC_SECRET',
+    'CORS_ORIGIN',
+    'APP_ENCRYPTION_KEY',
+    'AI_ATTESTATION_SECRET'
+];
+
 
 if (process.env.NODE_ENV !== 'test' && !process.env.MONGODB_URI) {
     throw new Error('MONGODB_URI is required for attendance-service. Refusing to use a fallback database.');
@@ -31,6 +39,10 @@ if (process.env.NODE_ENV === 'production') {
     if ((process.env.SYNC_SECRET || '').length < 32) {
         throw new Error('SYNC_SECRET must be at least 32 characters in production');
     }
+
+    if ((process.env.AI_ATTESTATION_SECRET || '').length < 32) {
+        throw new Error('AI_ATTESTATION_SECRET must be at least 32 characters in production');
+    }
 }
 
 module.exports = {
@@ -42,4 +54,6 @@ module.exports = {
     allowedOrigins: parseAllowedOrigins(process.env.CORS_ORIGIN || '*'),
     aiServiceUrl: process.env.AI_SERVICE_URL || 'http://localhost:8000',
     aiApiKey: process.env.AI_API_KEY || '',
+    aiAttestationSecret: process.env.AI_ATTESTATION_SECRET || '',
+    appEncryptionKey: process.env.APP_ENCRYPTION_KEY || '',
 };

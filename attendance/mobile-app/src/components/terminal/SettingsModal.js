@@ -7,7 +7,7 @@ import { deviceApi, getDefaultApiConfig, updateApiConfig } from '../../services/
 import { discoverServerHost } from '../../services/discovery';
 import { reconnectSocketWithToken } from '../../services/socket';
 
-export default function SettingsModal({ visible, onClose, onSave, onStartRegistration, onOpenAdmin, currentConfig }) {
+export default function SettingsModal({ visible, onClose, onSave, onStartRegistration, currentConfig, onOpenAdmin }) {
   const [config, setConfig] = useState(currentConfig || {
     ...getDefaultApiConfig(),
     terminalId: 'CAM-042',
@@ -23,13 +23,15 @@ export default function SettingsModal({ visible, onClose, onSave, onStartRegistr
     Network.getIpAddressAsync().then(ip => setDeviceIp(ip)).catch(() => {});
   }, []);
 
-  useEffect(() => {
+  const [prevVisible, setPrevVisible] = useState(visible);
+  if (visible !== prevVisible) {
+    setPrevVisible(visible);
     if (visible && currentConfig) {
       setConfig(currentConfig);
       setScanResult(null);
       setScanProgress('');
     }
-  }, [visible, currentConfig]);
+  }
 
   const handleAutoDiscover = async () => {
     setIsScanning(true);

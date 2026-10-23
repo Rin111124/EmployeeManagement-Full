@@ -3,7 +3,7 @@ const path = require('path');
 const fs = require('fs');
 
 const rootDir = path.resolve(__dirname, '..');
-const aiDir = path.join(rootDir, 'attendance-system', 'ai-service');
+const aiDir = path.join(rootDir, 'attendance', 'ai-service');
 
 const venvPythonWin = path.join(aiDir, '.venv', 'Scripts', 'python.exe');
 const venvPythonUnix = path.join(aiDir, '.venv', 'bin', 'python');

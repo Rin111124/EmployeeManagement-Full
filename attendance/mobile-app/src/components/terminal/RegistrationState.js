@@ -1,10 +1,8 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Animated, Dimensions, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useCallback, useEffect, useState } from 'react';
+import { ActivityIndicator, Animated, StyleSheet, Text, TouchableOpacity, View, useWindowDimensions } from 'react-native';
 import { AlertCircle, CheckCircle, Fingerprint, User } from 'lucide-react-native';
 import { Theme, Glows } from '../../theme/theme';
 import { attendanceApi } from '../../services/api';
-
-const { width } = Dimensions.get('window');
 
 const STEPS = [
   { id: 'CENTER', label: 'NHIN THANG', detail: 'Vui long nhin truc dien vao camera' },
@@ -19,14 +17,15 @@ const getEmployeeName = (employee) =>
 const getEmployeeId = (employee) => employee?._id || employee?.employee_id || employee?.employee_code;
 
 export default function RegistrationState({ employee, terminalId, captureEmbedding, onCancel, onComplete }) {
+  const { width, height } = useWindowDimensions();
   const [currentStep, setCurrentStep] = useState(0);
   const [progress, setProgress] = useState(0);
   const [isFinished, setIsFinished] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState(null);
 
-  const pulseAnim = useRef(new Animated.Value(1)).current;
-  const barWidth = useRef(new Animated.Value(0)).current;
+  const [pulseAnim] = useState(() => new Animated.Value(1));
+  const [barWidth] = useState(() => new Animated.Value(0));
 
   const handleFinalizeRegistration = useCallback(async () => {
     setIsSaving(true);
@@ -45,7 +44,12 @@ export default function RegistrationState({ employee, terminalId, captureEmbeddi
 
       // The four visual steps are a positioning guide; one embedding is captured
       // after the guide completes. Multi-angle enrollment can average per-step captures.
-      const embedding = await captureEmbedding();
+      const result = await captureEmbedding();
+      const embedding = Array.isArray(result) ? result : result?.embedding;
+
+      if (!Array.isArray(embedding) || embedding.length === 0) {
+        throw new Error('Khong trich xuat duoc dac trung khuon mat hop le');
+      }
 
       await attendanceApi.enrollFace(employeeId, fullName, embedding, terminalId);
       setIsFinished(true);
@@ -131,6 +135,8 @@ export default function RegistrationState({ employee, terminalId, captureEmbeddi
     );
   }
 
+  const frameSize = Math.min(Math.min(width, height) * 0.65, 270);
+
   return (
     <View style={styles.container}>
       <View style={styles.employeeHeader}>
@@ -139,8 +145,8 @@ export default function RegistrationState({ employee, terminalId, captureEmbeddi
         <Text style={styles.employeeIdText}>ID: {getEmployeeId(employee)}</Text>
       </View>
 
-      <View style={styles.enrollFrame}>
-        <Animated.View style={[styles.guideCircle, { transform: [{ scale: pulseAnim }] }]} />
+      <View style={[styles.enrollFrame, { width: frameSize, height: frameSize, borderRadius: frameSize / 2 }]}>
+        <Animated.View style={[styles.guideCircle, { width: frameSize * 0.78, height: frameSize * 0.78, borderRadius: (frameSize * 0.78) / 2, transform: [{ scale: pulseAnim }] }]} />
         <View style={styles.hudOverlay}>
           <View style={[styles.corner, styles.topLeft]} />
           <View style={[styles.corner, styles.topRight]} />
@@ -152,10 +158,10 @@ export default function RegistrationState({ employee, terminalId, captureEmbeddi
             <Text style={styles.stepText}>STEP {currentStep + 1}/{STEPS.length}</Text>
           </View>
         </View>
-        <User color={Theme.colors.onSurface} size={120} opacity={0.3} />
+        <User color={Theme.colors.onSurface} size={110} opacity={0.3} />
 
         {isSaving && (
-          <View style={styles.savingOverlay}>
+          <View style={[styles.savingOverlay, { borderRadius: frameSize / 2 }]}>
             <ActivityIndicator color={Theme.colors.green.container} size="large" />
             <Text style={styles.savingText}>DANG MA HOA...</Text>
           </View>
@@ -213,9 +219,6 @@ const styles = StyleSheet.create({
     fontFamily: 'monospace',
   },
   enrollFrame: {
-    width: width * 0.7,
-    height: width * 0.7,
-    borderRadius: (width * 0.7) / 2,
     borderWidth: 2,
     borderColor: Theme.colors.green.container,
     backgroundColor: 'rgba(52, 255, 141, 0.05)',
@@ -226,9 +229,6 @@ const styles = StyleSheet.create({
   },
   guideCircle: {
     position: 'absolute',
-    width: width * 0.55,
-    height: width * 0.55,
-    borderRadius: (width * 0.55) / 2,
     borderWidth: 1,
     borderColor: 'rgba(96, 255, 153, 0.3)',
     borderStyle: 'dashed',
@@ -240,7 +240,6 @@ const styles = StyleSheet.create({
   savingOverlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(10, 10, 15, 0.8)',
-    borderRadius: (width * 0.7) / 2,
     alignItems: 'center',
     justifyContent: 'center',
     gap: 10,

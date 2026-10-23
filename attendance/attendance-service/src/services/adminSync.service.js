@@ -24,7 +24,7 @@ const { enqueueAttendanceEvent, processOutboxBatch } = require('./outbox.service
  * the error now propagates to the caller (.catch(console.error) in the controller),
  * making the failure visible instead of silently losing the outbox event.
  */
-async function pushAttendanceToAdmin(record) {
+async function pushAttendanceToAdmin(record, options = {}) {
     const outboxEvent = await enqueueAttendanceEvent({
         employee_id: record.employee_id,
         check_in: record.check_in,
@@ -32,7 +32,7 @@ async function pushAttendanceToAdmin(record) {
         device_id: record.device_id,
         confidence: record.confidence,
         method: record.method || 'face',
-    });
+    }, options);
 
     // Trigger immediate sync asynchronously
     processOutboxBatch().catch((err) => {

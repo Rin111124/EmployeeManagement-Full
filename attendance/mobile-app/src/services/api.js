@@ -532,7 +532,11 @@ const retryWithFreshDeviceToken = async (operation, config) => {
 };
 
 export const aiApi = {
-  extractFeatures: async (imageUri) => {
+  extractFeatures: async (imageUri, config) => {
+    // Ensure the device is registered and has a valid token before calling
+    // the authenticated /devices/extract-features endpoint.
+    await deviceApi.ensureAccess(config);
+
     const formData = new FormData();
     formData.append('file', {
       uri: imageUri,
@@ -549,13 +553,27 @@ export const aiApi = {
 
       return response.data;
     } catch (error) {
+      if (isDeviceAuthRejected(error)) {
+        // Token was rejected — clear it, re-authenticate, and retry once.
+        debugWarn('[API] Device token rejected on extract-features. Reclaiming...');
+        await deviceApi.clearToken();
+        await deviceApi.ensureAccess(config);
+        try {
+          const retry = await adminApi.post('/devices/extract-features', formData, {
+            headers: { 'Content-Type': 'multipart/form-data' }
+          });
+          return retry.data;
+        } catch (retryError) {
+          wrapNetworkError(retryError, 'Admin API', ADMIN_URL);
+        }
+      }
       wrapNetworkError(error, 'Admin API', ADMIN_URL);
     }
   }
 };
 
 export const attendanceApi = {
-  recognizeAndCheck: async (embedding, deviceId) => {
+  recognizeAndCheck: async (embedding, deviceId, livenessPayload = {}) => {
     if (!Array.isArray(embedding) || embedding.length === 0) {
       throw new Error('Embedding khong hop le');
     }
@@ -564,13 +582,14 @@ export const attendanceApi = {
       const response = await retryWithFreshDeviceToken(() =>
         attendanceClient.post('/attendance/recognize', {
           embedding,
-          device_id: deviceId
+          device_id: deviceId,
+          ...livenessPayload,
         })
       );
 
       return response.data;
     } catch (error) {
-      debugWarn('[REGISTRATION] Enroll failed:', error.response?.data || error.message);
+      debugWarn('[ATTENDANCE] Check-in call failed:', error.response?.data || error.message);
       wrapNetworkError(error, 'Attendance Service', ATTENDANCE_URL);
     }
   },

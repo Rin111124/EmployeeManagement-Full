@@ -1,9 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { StyleSheet, View, Text, Animated, TouchableOpacity, Dimensions } from 'react-native';
-import { User, CheckCircle, WifiOff, RefreshCw, AlertTriangle } from 'lucide-react-native';
-import { Theme, Glows } from '../../theme/theme';
-
-const { width } = Dimensions.get('window');
+import React, { useState, useEffect } from 'react';
+import { StyleSheet, View, Text, Animated, TouchableOpacity, useWindowDimensions } from 'react-native';
+import { ScanFace, WifiOff, RefreshCw, Sparkles } from 'lucide-react-native';
 
 export default function IdleState({ 
   onStartScan, 
@@ -11,35 +8,32 @@ export default function IdleState({
   serverHost = '', 
   onRetryConnection 
 }) {
+  const { width, height } = useWindowDimensions();
   const [time, setTime] = useState(new Date());
-  const rotateAnim = useRef(new Animated.Value(0)).current;
-  const scanLineAnim = useRef(new Animated.Value(0)).current;
-  const spinAnim = useRef(new Animated.Value(0)).current;
-  const alertPulseAnim = useRef(new Animated.Value(1)).current;
+  const [pulseAnim] = useState(() => new Animated.Value(1));
+  const [spinAnim] = useState(() => new Animated.Value(0));
 
   const isConnected = connectionStatus === 'connected';
   const isConnecting = connectionStatus === 'connecting';
   const isDisconnected = connectionStatus === 'disconnected';
 
+  // Responsive oval dimensions: never overflow screen, adapt for tablet & landscape
+  const isLandscape = width > height;
+  const minOvalHeight = height < 500 ? 130 : 190;
+  const targetOvalHeight = Math.min(Math.max(height * (isLandscape ? 0.35 : 0.38), minOvalHeight), 320);
+  const targetOvalWidth = Math.min(targetOvalHeight * 0.74, width * 0.72);
+
   useEffect(() => {
     const timer = setInterval(() => setTime(new Date()), 1000);
 
-    // Rotation animation
-    Animated.loop(
-      Animated.timing(rotateAnim, {
-        toValue: 1,
-        duration: 10000,
-        useNativeDriver: true,
-      })
-    ).start();
-
-    // Scanning line animation
-    Animated.loop(
+    // Soft breathing pulse animation for the face oval guide
+    const pulseLoop = Animated.loop(
       Animated.sequence([
-        Animated.timing(scanLineAnim, { toValue: 1, duration: 4000, useNativeDriver: true }),
-        Animated.timing(scanLineAnim, { toValue: 0, duration: 4000, useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 1.03, duration: 1800, useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 1, duration: 1800, useNativeDriver: true }),
       ])
-    ).start();
+    );
+    pulseLoop.start();
 
     // Spin animation for connecting
     let spinLoop;
@@ -56,68 +50,19 @@ export default function IdleState({
       spinAnim.setValue(0);
     }
 
-    // Alert pulse for disconnected state
-    let alertLoop;
-    if (isDisconnected) {
-      alertLoop = Animated.loop(
-        Animated.sequence([
-          Animated.timing(alertPulseAnim, { toValue: 0.3, duration: 600, useNativeDriver: true }),
-          Animated.timing(alertPulseAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
-        ])
-      );
-      alertLoop.start();
-    } else {
-      alertPulseAnim.setValue(1);
-    }
-
     return () => {
       clearInterval(timer);
+      pulseLoop.stop();
       if (spinLoop) spinLoop.stop();
-      if (alertLoop) alertLoop.stop();
     };
-  }, [rotateAnim, scanLineAnim, spinAnim, alertPulseAnim, connectionStatus, isConnecting, isDisconnected]);
-
-  const rotation = rotateAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['0deg', '360deg'],
-  });
+  }, [pulseAnim, spinAnim, isConnecting]);
 
   const spin = spinAnim.interpolate({
     inputRange: [0, 1],
     outputRange: ['0deg', '360deg'],
   });
 
-  const scanLineTranslateY = scanLineAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0, width * 0.75],
-  });
-
-  // Dynamic Theme Colors based on connection
-  const frameBorderColor = isConnected 
-    ? Theme.colors.cyan.container 
-    : isConnecting 
-      ? Theme.colors.amber.container 
-      : Theme.colors.red.tertiary;
-
-  const frameGlow = isConnected 
-    ? Glows.cyan 
-    : isConnecting 
-      ? Glows.amber 
-      : Glows.red;
-
-  const badgeBg = isConnected
-    ? '#14141F'
-    : isConnecting
-      ? 'rgba(245, 158, 11, 0.12)'
-      : 'rgba(255, 51, 102, 0.15)';
-
-  const badgeBorderColor = isConnected
-    ? Theme.colors.outlineVariant
-    : isConnecting
-      ? Theme.colors.amber.container
-      : Theme.colors.red.tertiary;
-
-  const handleMainPress = () => {
+  const handlePress = () => {
     if (isDisconnected) {
       if (onRetryConnection) onRetryConnection();
     } else {
@@ -125,139 +70,114 @@ export default function IdleState({
     }
   };
 
+  const formattedDate = new Intl.DateTimeFormat('vi-VN', {
+    weekday: 'long',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric'
+  }).format(time);
+
+  const ovalBorderColor = isConnected 
+    ? 'rgba(56, 189, 248, 0.7)' // Sky blue
+    : isConnecting 
+      ? 'rgba(245, 158, 11, 0.7)' 
+      : 'rgba(239, 68, 68, 0.7)';
+
   return (
     <TouchableOpacity 
       style={styles.container} 
       activeOpacity={1} 
-      onPress={handleMainPress}
+      onPress={handlePress}
     >
-      {/* Camera Frame Area */}
-      <View style={[styles.cameraFrame, { borderColor: frameBorderColor }, frameGlow]}>
-        <View style={styles.gridBackground} />
-        
-        {/* Warning Banner inside camera frame when disconnected */}
-        {isDisconnected && (
-          <Animated.View style={[styles.bannerContainer, { opacity: alertPulseAnim }]}>
-            <View style={styles.disconnectedBanner}>
-              <AlertTriangle color={Theme.colors.red.tertiary} size={15} />
-              <Text style={styles.disconnectedBannerText}>
-                MÁY CHỦ NGOẠI TUYẾN ({serverHost || 'LAN'})
-              </Text>
-            </View>
-          </Animated.View>
-        )}
+      {/* Modern Oval Face Biometric Guide (Responsive clamping) */}
+      <View style={styles.faceGuideArea}>
+        <Animated.View 
+          style={[
+            styles.ovalFrame, 
+            { 
+              width: targetOvalWidth,
+              height: targetOvalHeight,
+              borderRadius: targetOvalWidth / 2,
+              borderColor: ovalBorderColor,
+              transform: [{ scale: pulseAnim }]
+            }
+          ]}
+        >
+          {/* Subtle Corner Brackets for alignment */}
+          <View style={[styles.cornerMark, styles.cornerTL, { top: targetOvalHeight * 0.1, left: targetOvalWidth * 0.05 }]} />
+          <View style={[styles.cornerMark, styles.cornerTR, { top: targetOvalHeight * 0.1, right: targetOvalWidth * 0.05 }]} />
+          <View style={[styles.cornerMark, styles.cornerBL, { bottom: targetOvalHeight * 0.1, left: targetOvalWidth * 0.05 }]} />
+          <View style={[styles.cornerMark, styles.cornerBR, { bottom: targetOvalHeight * 0.1, right: targetOvalWidth * 0.05 }]} />
 
-        {isConnecting && (
-          <View style={styles.bannerContainer}>
-            <View style={styles.connectingBanner}>
-              <Animated.View style={{ transform: [{ rotate: spin }] }}>
-                <RefreshCw color={Theme.colors.amber.container} size={13} />
-              </Animated.View>
-              <Text style={styles.connectingBannerText}>
-                ĐANG KẾT NỐI TỚI {serverHost || 'MÁY CHỦ'}...
-              </Text>
-            </View>
-          </View>
-        )}
-
-        {/* Corner Brackets */}
-        <View style={[styles.corner, styles.topLeft, { borderColor: frameBorderColor }]} />
-        <View style={[styles.corner, styles.topRight, { borderColor: frameBorderColor }]} />
-        <View style={[styles.corner, styles.bottomLeft, { borderColor: frameBorderColor }]} />
-        <View style={[styles.corner, styles.bottomRight, { borderColor: frameBorderColor }]} />
-
-        {/* Center Content */}
-        <View style={styles.centerContent}>
-          <Animated.View style={[styles.rotatingCircle, { transform: [{ rotate: rotation }] }]} />
-          {isDisconnected ? (
-            <AlertTriangle color={Theme.colors.red.tertiary} size={80} opacity={0.8} />
-          ) : (
-            <User color={Theme.colors.cyan.dim} size={80} opacity={0.6} />
-          )}
-          
-          <Text style={[
-            styles.frameTitle, 
-            isDisconnected && { color: Theme.colors.red.tertiary },
-            isConnecting && { color: Theme.colors.amber.container }
-          ]}>
-            {isDisconnected 
-              ? 'MẤT KẾT NỐI VỚI SERVER' 
-              : isConnecting 
-                ? 'ĐANG THIẾT LẬP KẾT NỐI' 
-                : 'ĐƯA MẶT VÀO KHUNG HÌNH'}
-          </Text>
-          {isDisconnected && (
-            <Text style={styles.frameSubtitle}>
-              Chạm vào màn hình để kết nối lại
+          {/* Guide Chip */}
+          <View style={styles.guideChip}>
+            <Sparkles color="#38BDF8" size={12} />
+            <Text style={styles.guideChipText}>
+              {isDisconnected ? 'MẤT KẾT NỐI' : isConnecting ? 'ĐANG ĐỒNG BỘ...' : 'HƯỚNG MẶT VÀO KHUNG'}
             </Text>
-          )}
-        </View>
-
-        {/* Scanning Line (only when connected/connecting) */}
-        {!isDisconnected && (
-          <Animated.View style={[styles.scanLine, { transform: [{ translateY: scanLineTranslateY }] }]} />
-        )}
+          </View>
+        </Animated.View>
       </View>
 
-      {/* Clock Area */}
-      <View style={styles.clockContainer}>
-        <Text style={styles.clockText}>
+      {/* Clock & Date Section */}
+      <View style={styles.clockSection}>
+        <Text style={[styles.clockTime, height < 700 && { fontSize: 38 }]}>
           {time.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', hour12: false })}
         </Text>
+        <Text style={styles.clockDate}>{formattedDate}</Text>
       </View>
 
-      {/* Ready Badge / Connection Action Badge */}
-      <TouchableOpacity 
-        style={[
-          styles.readyBadge, 
-          { backgroundColor: badgeBg, borderColor: badgeBorderColor },
-          frameGlow
-        ]}
-        onPress={handleMainPress}
-        activeOpacity={0.7}
-      >
-        {isConnected && (
-          <>
-            <CheckCircle color={Theme.colors.cyan.container} size={28} />
-            <View style={styles.badgeTextCol}>
-              <Text style={styles.readyText}>HỆ THỐNG SẴN SÀNG</Text>
-              <Text style={styles.readySubtext}>CHẠM ĐỂ BẮT ĐẦU ĐIỂM DANH</Text>
-            </View>
-          </>
-        )}
+      {/* Action Check-in Card (Responsive max width) */}
+      <View style={styles.actionCardWrapper}>
+        <TouchableOpacity 
+          style={[
+            styles.actionCard,
+            { width: Math.min(width * 0.88, 380) },
+            isDisconnected && styles.actionCardDanger,
+            isConnecting && styles.actionCardWarning
+          ]}
+          onPress={handlePress}
+          activeOpacity={0.8}
+        >
+          {isConnected && (
+            <>
+              <View style={styles.actionIconBox}>
+                <ScanFace color="#10B981" size={24} />
+              </View>
+              <View style={styles.actionTextBox}>
+                <Text style={styles.actionTitle}>CHẠM ĐỂ ĐIỂM DANH</Text>
+                <Text style={styles.actionSubtitle}>Nhận diện khuôn mặt tức thì</Text>
+              </View>
+            </>
+          )}
 
-        {isConnecting && (
-          <>
-            <Animated.View style={{ transform: [{ rotate: spin }] }}>
-              <RefreshCw color={Theme.colors.amber.container} size={28} />
-            </Animated.View>
-            <View style={styles.badgeTextCol}>
-              <Text style={[styles.readyText, { color: Theme.colors.amber.container }]}>
-                ĐANG KẾT NỐI MÁY CHỦ...
-              </Text>
-              <Text style={[styles.readySubtext, { color: Theme.colors.amber.dim }]}>
-                ĐANG LIÊN LẠC {serverHost || 'SERVER'}:5000
-              </Text>
-            </View>
-          </>
-        )}
+          {isConnecting && (
+            <>
+              <View style={[styles.actionIconBox, { backgroundColor: 'rgba(245, 158, 11, 0.15)' }]}>
+                <Animated.View style={{ transform: [{ rotate: spin }] }}>
+                  <RefreshCw color="#F59E0B" size={22} />
+                </Animated.View>
+              </View>
+              <View style={styles.actionTextBox}>
+                <Text style={[styles.actionTitle, { color: '#F59E0B' }]}>ĐANG KẾT NỐI MÁY CHỦ</Text>
+                <Text style={styles.actionSubtitle}>Vui lòng chờ trong giây lát...</Text>
+              </View>
+            </>
+          )}
 
-        {isDisconnected && (
-          <>
-            <Animated.View style={{ opacity: alertPulseAnim }}>
-              <WifiOff color={Theme.colors.red.tertiary} size={28} />
-            </Animated.View>
-            <View style={styles.badgeTextCol}>
-              <Text style={[styles.readyText, { color: Theme.colors.red.tertiary }]}>
-                MẤT KẾT NỐI MÁY CHỦ
-              </Text>
-              <Text style={[styles.readySubtext, { color: Theme.colors.red.container }]}>
-                CHẠM VÀO ĐÂY ĐỂ THỬ LẠI KẾT NỐI
-              </Text>
-            </View>
-          </>
-        )}
-      </TouchableOpacity>
+          {isDisconnected && (
+            <>
+              <View style={[styles.actionIconBox, { backgroundColor: 'rgba(239, 68, 68, 0.15)' }]}>
+                <WifiOff color="#EF4444" size={22} />
+              </View>
+              <View style={styles.actionTextBox}>
+                <Text style={[styles.actionTitle, { color: '#EF4444' }]}>MẤT KẾT NỐI MÁY CHỦ</Text>
+                <Text style={styles.actionSubtitle}>Chạm vào đây để kết nối lại</Text>
+              </View>
+            </>
+          )}
+        </TouchableOpacity>
+      </View>
     </TouchableOpacity>
   );
 }
@@ -267,160 +187,160 @@ const styles = StyleSheet.create({
     flex: 1,
     width: '100%',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 20,
+    justifyContent: 'space-evenly',
+    paddingVertical: 10,
+    zIndex: 20,
+    elevation: 20,
   },
-  cameraFrame: {
-    width: width * 0.85,
-    height: width * 0.85,
-    backgroundColor: '#14141F',
-    borderWidth: 2,
-    borderColor: Theme.colors.cyan.container,
-    borderStyle: 'dashed',
+  faceGuideArea: {
     alignItems: 'center',
     justifyContent: 'center',
-    position: 'relative',
-    overflow: 'hidden',
-    ...Glows.cyan,
+    zIndex: 21,
+    elevation: 21,
   },
-  gridBackground: {
-    ...StyleSheet.absoluteFillObject,
-    opacity: 0.1,
-    // Native doesn't support svg patterns easily, so we use a simple grid effect
-  },
-  corner: {
-    position: 'absolute',
-    width: 30,
-    height: 30,
-    borderColor: Theme.colors.cyan.container,
-  },
-  topLeft: { top: 0, left: 0, borderTopWidth: 5, borderLeftWidth: 5 },
-  topRight: { top: 0, right: 0, borderTopWidth: 5, borderRightWidth: 5 },
-  bottomLeft: { bottom: 0, left: 0, borderBottomWidth: 5, borderLeftWidth: 5 },
-  bottomRight: { bottom: 0, right: 0, borderBottomWidth: 5, borderRightWidth: 5 },
-  centerContent: {
+  ovalFrame: {
+    borderWidth: 2.5,
     alignItems: 'center',
-    gap: 15,
+    justifyContent: 'flex-start',
+    paddingTop: 16,
+    shadowColor: '#38BDF8',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.35,
+    shadowRadius: 16,
+    elevation: 4,
   },
-  rotatingCircle: {
+  cornerMark: {
     position: 'absolute',
-    width: 160,
-    height: 160,
-    borderRadius: 80,
-    borderWidth: 1,
-    borderColor: 'rgba(0, 212, 255, 0.2)',
-    borderStyle: 'dashed',
+    width: 20,
+    height: 20,
+    borderColor: '#38BDF8',
   },
-  frameTitle: {
-    color: Theme.colors.cyan.container,
-    fontSize: 16,
-    fontWeight: '900',
-    letterSpacing: 2,
-    fontFamily: 'monospace',
-    textAlign: 'center',
-    ...Glows.cyan,
+  cornerTL: {
+    borderTopWidth: 3,
+    borderLeftWidth: 3,
+    borderTopLeftRadius: 6,
   },
-  scanLine: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 2,
-    backgroundColor: Theme.colors.cyan.container,
-    opacity: 0.5,
-    ...Glows.cyan,
+  cornerTR: {
+    borderTopWidth: 3,
+    borderRightWidth: 3,
+    borderTopRightRadius: 6,
   },
-  clockContainer: {
-    alignItems: 'center',
+  cornerBL: {
+    borderBottomWidth: 3,
+    borderLeftWidth: 3,
+    borderBottomLeftRadius: 6,
   },
-  clockText: {
-    color: Theme.colors.cyan.dim,
-    fontSize: 80,
-    fontWeight: '800',
-    fontFamily: 'monospace',
-    ...Glows.cyan,
+  cornerBR: {
+    borderBottomWidth: 3,
+    borderRightWidth: 3,
+    borderBottomRightRadius: 6,
   },
-  readyBadge: {
+  guideChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 15,
-    backgroundColor: '#14141F',
-    paddingHorizontal: 30,
-    paddingVertical: 15,
-    borderWidth: 1,
-    borderColor: Theme.colors.outlineVariant,
-    ...Glows.cyan,
-  },
-  readyText: {
-    color: Theme.colors.cyan.container,
-    fontSize: 20,
-    fontWeight: '900',
-    letterSpacing: 2,
-    textTransform: 'uppercase',
-    ...Glows.cyan,
-  },
-  bannerContainer: {
-    position: 'absolute',
-    top: 12,
-    left: 12,
-    right: 12,
-    zIndex: 10,
-    alignItems: 'center',
-  },
-  disconnectedBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: 'rgba(255, 68, 68, 0.2)',
-    borderWidth: 1,
-    borderColor: Theme.colors.red.tertiary,
-    borderRadius: 4,
+    gap: 6,
+    backgroundColor: 'rgba(15, 23, 42, 0.85)',
     paddingHorizontal: 12,
-    paddingVertical: 6,
-  },
-  disconnectedBannerText: {
-    color: Theme.colors.red.tertiary,
-    fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: 1,
-    fontFamily: 'monospace',
-  },
-  connectingBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: 'rgba(255, 179, 0, 0.2)',
+    paddingVertical: 5,
+    borderRadius: 20,
     borderWidth: 1,
-    borderColor: Theme.colors.amber.container,
-    borderRadius: 4,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    borderColor: 'rgba(56, 189, 248, 0.35)',
   },
-  connectingBannerText: {
-    color: Theme.colors.amber.container,
-    fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: 1,
-    fontFamily: 'monospace',
-  },
-  frameSubtitle: {
-    color: Theme.colors.red.container,
-    fontSize: 12,
-    fontWeight: '600',
-    letterSpacing: 1,
-    fontFamily: 'monospace',
-    textAlign: 'center',
-    marginTop: -5,
-  },
-  badgeTextCol: {
-    flexDirection: 'column',
-  },
-  readySubtext: {
-    color: Theme.colors.cyan.dim,
+  guideChipText: {
+    color: '#E2E8F0',
     fontSize: 11,
     fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  clockSection: {
+    alignItems: 'center',
+    zIndex: 22,
+    elevation: 22,
+    backgroundColor: 'rgba(15, 23, 42, 0.72)',
+    borderRadius: 16,
+    paddingHorizontal: 18,
+    paddingVertical: 8,
+  },
+  clockTime: {
+    color: '#FFFFFF',
+    fontSize: 44,
+    fontWeight: '800',
     letterSpacing: 1,
-    fontFamily: 'monospace',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.5,
+    shadowRadius: 6,
+    zIndex: 24,
+    elevation: 24,
+  },
+  clockDate: {
+    color: '#94A3B8',
+    fontSize: 13,
+    fontWeight: '600',
     marginTop: 2,
+    textTransform: 'capitalize',
+    zIndex: 24,
+    elevation: 24,
+  },
+  actionCardWrapper: {
+    width: '100%',
+    alignItems: 'center',
+    paddingBottom: 20,
+    zIndex: 22,
+    elevation: 22,
+  },
+  actionCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    backgroundColor: 'rgba(15, 23, 42, 0.88)',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.35)',
+    shadowColor: '#10B981',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 14,
+    elevation: 8,
+  },
+  actionCardWarning: {
+    borderColor: 'rgba(245, 158, 11, 0.4)',
+    shadowColor: '#F59E0B',
+  },
+  actionCardDanger: {
+    borderColor: 'rgba(239, 68, 68, 0.4)',
+    shadowColor: '#EF4444',
+  },
+  actionIconBox: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: 'rgba(16, 185, 129, 0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  actionTextBox: {
+    flexDirection: 'column',
+    flex: 1,
+    zIndex: 23,
+    elevation: 23,
+  },
+  actionTitle: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+    zIndex: 24,
+    elevation: 24,
+  },
+  actionSubtitle: {
+    color: '#94A3B8',
+    fontSize: 12,
+    fontWeight: '500',
+    marginTop: 2,
+    zIndex: 24,
+    elevation: 24,
   },
 });

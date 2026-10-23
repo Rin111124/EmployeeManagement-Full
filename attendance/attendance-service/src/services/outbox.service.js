@@ -29,11 +29,11 @@ const getSyncSecret = () => process.env.SYNC_SECRET || env.syncSecret;
  * Enqueue attendance event into outbox table.
  * Zero data loss guarantee: record is persisted locally before network transmission.
  */
-async function enqueueAttendanceEvent(payload) {
+async function enqueueAttendanceEvent(payload, options = {}) {
     const eventId = crypto.randomUUID();
     const eventType = payload.check_out ? 'attendance.checked_out' : 'attendance.checked_in';
 
-    const outboxRecord = await AttendanceOutbox.create({
+    const eventData = {
         event_id: eventId,
         event_type: eventType,
         payload: {
@@ -48,7 +48,15 @@ async function enqueueAttendanceEvent(payload) {
         retry_count: 0,
         max_retries: 5,
         next_retry_at: new Date(),
-    });
+    };
+
+    let outboxRecord;
+    if (options.session) {
+        const created = await AttendanceOutbox.create([eventData], { session: options.session });
+        outboxRecord = created[0];
+    } else {
+        outboxRecord = await AttendanceOutbox.create(eventData);
+    }
 
     return outboxRecord;
 }
@@ -99,14 +107,23 @@ async function processOutboxBatch(batchSize = 10) {
     let errorCount = 0;
 
     for (const event of pendingEvents) {
-        event.status = 'processing';
-        await event.save();
+        // Giai đoạn 3 (P0): Atomic conditional claim để chống race condition khi có nhiều workers chạy đồng thời
+        const claimedEvent = await AttendanceOutbox.findOneAndUpdate(
+            { _id: event._id, status: { $in: ['pending', 'failed'] } },
+            { $set: { status: 'processing', updated_at: new Date() } },
+            { new: true }
+        );
+
+        if (!claimedEvent) {
+            // Đã được worker khác claim — bỏ qua
+            continue;
+        }
 
         try {
             const requestBody = {
-                event_id: event.event_id,
-                event_type: event.event_type,
-                ...event.payload,
+                event_id: claimedEvent.event_id,
+                event_type: claimedEvent.event_type,
+                ...claimedEvent.payload,
             };
 
             // P0-TLS-04: Sign request with HMAC timestamp to prevent replay attacks
@@ -126,27 +143,27 @@ async function processOutboxBatch(batchSize = 10) {
                 }
             );
 
-            event.status = 'completed';
-            event.processed_at = new Date();
-            event.last_error = null;
-            await event.save();
+            claimedEvent.status = 'completed';
+            claimedEvent.processed_at = new Date();
+            claimedEvent.last_error = null;
+            await claimedEvent.save();
             processedCount++;
         } catch (err) {
             errorCount++;
-            event.retry_count = (event.retry_count || 0) + 1;
-            event.last_error = err.message || 'Unknown sync error';
+            claimedEvent.retry_count = (claimedEvent.retry_count || 0) + 1;
+            claimedEvent.last_error = err.message || 'Unknown sync error';
 
-            if (event.retry_count >= event.max_retries) {
-                event.status = 'dead_letter';
-                console.error(`[OUTBOX] Event ${event.event_id} moved to DEAD_LETTER after ${event.retry_count} retries: ${err.message}`);
+            if (claimedEvent.retry_count >= claimedEvent.max_retries) {
+                claimedEvent.status = 'dead_letter';
+                console.error(`[OUTBOX] Event ${claimedEvent.event_id} moved to DEAD_LETTER after ${claimedEvent.retry_count} retries: ${err.message}`);
             } else {
-                event.status = 'failed';
+                claimedEvent.status = 'failed';
                 // Exponential backoff: 2s, 4s, 8s, 16s...
-                const backoffSeconds = Math.pow(2, event.retry_count);
-                event.next_retry_at = new Date(Date.now() + backoffSeconds * 1000);
-                console.warn(`[OUTBOX] Event ${event.event_id} sync failed (attempt ${event.retry_count}/${event.max_retries}). Next retry in ${backoffSeconds}s`);
+                const backoffSeconds = Math.pow(2, claimedEvent.retry_count);
+                claimedEvent.next_retry_at = new Date(Date.now() + backoffSeconds * 1000);
+                console.warn(`[OUTBOX] Event ${claimedEvent.event_id} sync failed (attempt ${claimedEvent.retry_count}/${claimedEvent.max_retries}). Next retry in ${backoffSeconds}s`);
             }
-            await event.save();
+            await claimedEvent.save();
         }
     }
 

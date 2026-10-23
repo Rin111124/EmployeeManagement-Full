@@ -1,111 +1,93 @@
 import React from 'react';
 import { StyleSheet, View, Text, TouchableOpacity } from 'react-native';
-import { Theme, Glows } from '../../theme/theme';
+import { AlertCircle } from 'lucide-react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function Footer({ info, connectionStatus = 'connected', onRetryConnection }) {
-  const isError = info.status === 'ERROR';
-  const isConnected = connectionStatus === 'connected';
-  const isConnecting = connectionStatus === 'connecting';
+  const insets = useSafeAreaInsets();
+  const isDisconnected = connectionStatus === 'disconnected';
 
-  const serverColor = isConnected 
-    ? Theme.colors.green.container 
-    : isConnecting 
-      ? Theme.colors.amber.container 
-      : Theme.colors.red.tertiary;
-
-  const serverGlow = isConnected 
-    ? Glows.green 
-    : isConnecting 
-      ? Glows.amber 
-      : Glows.red;
-
-  const serverText = isConnected
-    ? `ONLINE (${info.ip || 'LAN'})`
-    : isConnecting
-      ? `ĐANG KẾT NỐI...`
-      : `OFFLINE (CHẠM ĐỂ THỬ LẠI)`;
-
-  return (
-    <View style={styles.footer}>
-      <View style={styles.topRow}>
-        <Text style={styles.label}>
-          SYSTEM: <Text style={[styles.value, isError ? styles.errorText : styles.successText]}>
-            {info.status}
-          </Text>
-        </Text>
-
+  if (isDisconnected) {
+    return (
+      <View 
+        style={[styles.footerContainer, { bottom: Math.max(insets.bottom + 10, 16) }]}
+        pointerEvents="box-none"
+      >
         <TouchableOpacity 
-          onPress={onRetryConnection} 
-          disabled={isConnected} 
-          activeOpacity={0.7}
-          style={styles.serverStatusTouchable}
+          style={styles.alertPill}
+          onPress={onRetryConnection}
+          activeOpacity={0.8}
         >
-          <Text style={styles.label}>
-            SERVER:{' '}
-            <Text style={[styles.value, { color: serverColor }, serverGlow]}>
-              {serverText}
-            </Text>
+          <AlertCircle color="#EF4444" size={14} />
+          <Text style={styles.alertText}>
+            Máy chủ mất kết nối • Chạm vào đây để kết nối lại
           </Text>
         </TouchableOpacity>
       </View>
-      <View style={styles.bottomRow}>
-        <Text style={styles.infoItem}>ID: {info.id}</Text>
-        <Text style={styles.infoItem}>IP: {info.ip}</Text>
-        <Text style={styles.infoItem}>PORT: {info.port}</Text>
-        <Text style={styles.infoItem}>GATE {info.gate}</Text>
+    );
+  }
+
+  return (
+    <View 
+      style={[styles.footerContainer, { bottom: Math.max(insets.bottom + 10, 16) }]}
+      pointerEvents="box-none"
+    >
+      <View style={styles.hintPill}>
+        <Text style={styles.hintText}>
+          Nhìn thẳng vào khung hình • Chạm màn hình để điểm danh
+        </Text>
       </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  footer: {
+  footerContainer: {
     position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    paddingHorizontal: 20,
-    paddingVertical: 15,
-    backgroundColor: 'rgba(19, 19, 24, 0.9)',
-    borderTopWidth: 2,
-    borderTopColor: Theme.colors.outlineVariant,
-    zIndex: 100,
-    gap: 5,
-  },
-  topRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    left: 20,
+    right: 20,
     alignItems: 'center',
+    zIndex: 900,
+    elevation: 30,
   },
-  serverStatusTouchable: {
-    paddingVertical: 2,
-    paddingHorizontal: 4,
+  hintPill: {
+    backgroundColor: 'rgba(15, 23, 42, 0.75)',
+    paddingHorizontal: 18,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 4,
   },
-  label: {
-    color: '#94A3B8',
-    fontSize: 10,
-    fontFamily: 'monospace',
-    letterSpacing: 1,
-    textTransform: 'uppercase',
+  hintText: {
+    color: '#CBD5E1',
+    fontSize: 12,
+    fontWeight: '500',
+    letterSpacing: 0.3,
   },
-  value: {
-    fontWeight: 'bold',
-  },
-  successText: {
-    color: Theme.colors.green.container,
-  },
-  errorText: {
-    color: Theme.colors.red.tertiary,
-  },
-  bottomRow: {
+  alertPill: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(239, 68, 68, 0.18)',
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.4)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 4,
   },
-  infoItem: {
-    color: Theme.colors.cyan.container,
-    fontSize: 9,
-    fontFamily: 'monospace',
-    letterSpacing: 1,
-    textTransform: 'uppercase',
-  }
+  alertText: {
+    color: '#F87171',
+    fontSize: 12,
+    fontWeight: '600',
+  },
 });

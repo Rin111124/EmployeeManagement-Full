@@ -46,7 +46,7 @@ services:
       - internal_net
 
   admin-backend:
-    build: ./admin-system/backend
+    build: ./packages/backend
     mem_limit: 256m
     ports:
       - "127.0.0.1:5000:5000"
@@ -95,7 +95,7 @@ services:
 
   admin-frontend:
     build:
-      context: ./admin-system/frontend
+      context: ./packages/frontend
       args:
         # Browser calls the same origin; nginx forwards /api/v1 to the backend.
         VITE_API_BASE: ${VITE_API_BASE:-/api/v1}
@@ -108,7 +108,7 @@ services:
       - internal_net
 
   ai-service:
-    build: ./attendance-system/ai-service
+    build: ./attendance/ai-service
     mem_limit: 768m
     ports:
       - "127.0.0.1:8000:8000"
@@ -133,7 +133,7 @@ services:
       - internal_net
 
   attendance-service:
-    build: ./attendance-system/attendance-service
+    build: ./attendance/attendance-service
     mem_limit: 192m
     ports:
       - "127.0.0.1:5001:5001"

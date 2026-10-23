@@ -1,158 +1,37 @@
-# Admin System
+# ⚠️ Thư mục này không còn là source chính
 
-Phần mềm quản lý nhân viên toàn diện với backend API và giao diện web.
+> **Giai đoạn 0 — Source of Truth:** Thư mục `admin-system/` là **legacy shell**, không chứa mã nguồn hoạt động.
 
-## Project Structure
+## Source chính (Canonical Source)
 
-```text
-admin-system/
-├── backend/   # Express + MongoDB API
-└── frontend/  # React 19 + Vite web application
-```
+| Service | Thư mục chính | Ghi chú |
+|---|---|---|
+| **Admin Backend** | [`packages/backend/`](../packages/backend/) | Express 5 + MongoDB + Node 22 |
+| **Admin Frontend** | [`packages/frontend/`](../packages/frontend/) | React 19 + Vite + TypeScript |
 
-## Components
+## Tại sao vẫn còn thư mục này?
 
-### Backend (`backend/`)
+Thư mục `admin-system/` tồn tại từ cấu trúc monorepo ban đầu.
+Mã nguồn đã được di chuyển sang `packages/` kể từ refactoring giai đoạn 0.
+README này giữ nguyên để CI/git history không bị gián đoạn.
 
-Node.js/Express API service with MongoDB database.
+## Lệnh phát triển đúng
 
-- **Location**: `backend/`
-- **Technology**: Express.js, MongoDB, Mongoose
-- **API**: RESTful API under `/api/v1`
-- **Key Features**:
-  - Employee management (CRUD, positions, assignments)
-  - Authentication & Authorization (JWT)
-  - Attendance tracking
-  - Leave and overtime management
-  - Payroll management
-  - Audit logging
-  - Dashboard analytics
-
-For detailed information, see [backend/README.md](backend/README.md)
-
-### Frontend (`frontend/`)
-
-React 19 web application with TypeScript and Tailwind CSS.
-
-- **Location**: `frontend/`
-- **Technology**: React 19, TypeScript, Vite, Tailwind CSS
-- **Port**: 5173 (development)
-- **Features**:
-  - Employee management interface
-  - Attendance dashboard
-  - Leave request workflow
-  - Payroll management
-  - System settings and configuration
-
-For detailed information, see [frontend/README.md](frontend/README.md)
-
-## Quick Start
-
-### Prerequisites
-
-- Node.js 16+ and npm
-- MongoDB running locally or connection string to remote instance
-
-### Setup Backend
+Từ root của repo:
 
 ```bash
-cd backend
-npm install
-cp .env.example .env
-# Edit .env with your configuration
-npm start
+# Chạy backend
+npm --prefix packages/backend run dev
+
+# Chạy frontend
+npm --prefix packages/frontend run dev
+
+# Chạy cả hai cùng lúc
+npm run dev:admin
 ```
 
-The API will run on `http://localhost:5000`
+Xem chi tiết trong [packages/backend/README.md](../packages/backend/README.md) và [packages/frontend/README.md](../packages/frontend/README.md).
 
-### Setup Frontend
+---
 
-```bash
-cd frontend
-npm install
-cp .env.example .env.local
-# Edit .env.local if backend is not on localhost:5000
-npm run dev
-```
-
-The app will run on `http://localhost:5173`
-
-### Run Both Services
-
-From the repository root:
-
-```bash
-npm install
-npm run dev:all
-```
-
-This uses `concurrently` to run both frontend and backend simultaneously.
-
-## Environment Configuration
-
-- **Backend**: See `backend/.env.example` for required environment variables
-  - Database URI
-  - JWT secrets
-  - CORS origins
-  - Admin credentials
-  
-- **Frontend**: See `frontend/.env.example` for configuration
-  - API base URL
-  - App name
-
-## API Documentation
-
-Detailed API documentation and examples are available in [backend/docs/api-examples.md](backend/docs/api-examples.md)
-
-Common endpoints:
-- `POST /api/v1/auth/login` - User authentication
-- `GET /api/v1/employees` - List employees
-- `POST /api/v1/employees` - Create employee
-- `GET /api/v1/attendance` - Get attendance records
-- `GET /api/v1/dashboard` - Dashboard data
-
-## Security
-
-- JWT-based authentication
-- Password hashing with bcryptjs
-- Rate limiting on login attempts
-- CORS protection
-- Security headers via Helmet
-- Request sanitization
-
-For security details, see `backend/docs/architecture.md`
-
-## Scripts
-
-### Backend Scripts
-
-- `npm start` - Start development server
-- `npm run test` - Run tests
-- `npm run security:test` - Run security checks
-
-### Frontend Scripts
-
-- `npm run dev` - Start development server
-- `npm run build` - Build for production
-- `npm run lint` - Run linter
-
-## Troubleshooting
-
-### Backend won't start
-
-- Check MongoDB connection: `mongod` should be running
-- Verify `.env` file is created and configured
-- Check if port 5000 is available
-
-### Frontend development issues
-
-- Clear `node_modules` and reinstall: `rm -rf node_modules && npm install`
-- Clear Vite cache: `rm -rf .vite` then `npm run dev`
-- Check if port 5173 is available
-
-## Integration
-
-The admin system integrates with the [attendance-system](../attendance-system/) for:
-- Employee data syncing
-- Face recognition features
-- Check-in/check-out recording
+> **Không phát triển hoặc commit code vào thư mục `admin-system/`.** Mọi thay đổi vào `admin-system/` sẽ không được CI kiểm thử và không được deploy.

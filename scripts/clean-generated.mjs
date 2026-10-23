@@ -5,9 +5,9 @@ const root = process.cwd();
 
 const generatedPaths = [
   'out',
-  'admin-system/frontend/dist',
-  'attendance-system/mobile-app/dist',
-  'attendance-system/mobile-app/.expo',
+  'packages/frontend/dist',
+  'attendance/mobile-app/dist',
+  'attendance/mobile-app/.expo',
   'uml-diagrams/out',
 ];
 

@@ -52,12 +52,18 @@ backend/uploads/
 __pycache__/
 *.pyc
 expo-env.d.ts
+attendance/ai-service/models/*
+!attendance/ai-service/models/.gitkeep
 
 # Build output
 dist/
 build/
 out/
 web-build/
+
+# Legacy Monorepo directories (migrated to packages/ and attendance/)
+attendance-system/
+admin-system/
 uml-diagrams/out/
 uml-diagrams/docx-work/
 
@@ -67,6 +73,5 @@ Thumbs.db
 .vscode/
 .idea/
 
-# Internal planning, roadmaps, and audit reports
-docs/planning/
-docs/reports/
+# Documentation directory - excluded from Git
+docs/

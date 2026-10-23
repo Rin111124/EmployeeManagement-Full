@@ -30,6 +30,10 @@ npm run expo:go
 Open Expo Go on a device or emulator and scan the QR code. Expo Go only supports
 native modules included in its matching Expo SDK. If a library needs native
 code that Expo Go does not include, use the native development build below.
+The camera preview layering fix is an Android native config plugin, so Expo Go
+cannot receive that native change. Use Expo Go to check the JavaScript screens
+and navigation; verify the camera preview together with the full HUD in the
+Android development build or Android Studio.
 
 ### Native Android development build
 
@@ -37,11 +41,12 @@ code that Expo Go does not include, use the native development build below.
 npm run native:android
 ```
 
-This builds and installs the Android app from the checked-in `android/`
-project, then connects it to Metro on port `8082`. Start it again later with
-`npm run start` and open the installed app. This is the React Native Android
-app with Expo's native module and bundling integration; it is not the bare
-React Native CLI workflow (`npx react-native run-android`).
+This generates the ignored `android/` project when needed, builds and installs
+the app, then connects it to Metro on port `8082`. To use Android Studio,
+generate the native project with `npm run prebuild:android`, then open the
+`android/` directory in Android Studio and run the `app` configuration. The
+same JavaScript app also runs in the matching Expo Go SDK through `npm run
+expo:go`.
 
 After changing a native dependency or Expo config/plugin, rebuild the native
 app with `npm run native:android`. A JavaScript reload alone cannot update

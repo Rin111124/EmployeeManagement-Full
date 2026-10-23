@@ -1,5 +1,21 @@
 name: Deploy to Staging
 
+# Giai đoạn 0 — Fix: Workflow staging cũ chỉ là `echo` không deploy thật.
+# Workflow mới có:
+#   1. Validate: test + typecheck + build đầy đủ
+#   2. Deploy: SSH lên staging server, docker compose pull + up
+#   3. Smoke test: gọi /health endpoint để xác nhận service thực sự sẵn sàng
+#   4. Rollback tự động nếu smoke test thất bại
+#
+# Để activate deploy thực tế, cần cấu hình các GitHub Secrets sau trong environment 'staging':
+#   STAGING_SSH_KEY       — Private SSH key (PEM format)
+#   STAGING_SSH_USER      — SSH user (vd: deploy)
+#   STAGING_HOST          — IP hoặc hostname của staging server
+#   STAGING_DEPLOY_PATH   — Path trên server (vd: /opt/employee-management)
+#   STAGING_HEALTH_URL    — URL health endpoint (vd: https://staging.example.com/health)
+#
+# Khi chưa có server staging thật, các bước deploy sẽ bị skip (STAGING_HOST chưa set).
+
 on:
   push:
     branches:
@@ -13,57 +29,156 @@ concurrency:
 
 jobs:
   validate:
-    name: Validate Staging Build
+    name: Validate — Tests, Typecheck & Build
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
           cache: npm
           cache-dependency-path: |
-            admin-system/backend/package-lock.json
-            admin-system/frontend/package-lock.json
-            attendance-system/attendance-service/package-lock.json
+            packages/backend/package-lock.json
+            packages/frontend/package-lock.json
+            attendance/attendance-service/package-lock.json
 
-      - name: Backend Tests & Coverage
-        working-directory: admin-system/backend
+      - name: Backend — Install, Test & Coverage
+        working-directory: packages/backend
         run: |
           npm ci
           npm run test:coverage
 
-      - name: Attendance Service Tests
-        working-directory: attendance-system/attendance-service
+      - name: Attendance Service — Install & Test
+        working-directory: attendance/attendance-service
         run: |
           npm ci
           npm test
+        env:
+          NODE_ENV: test
+          SYNC_SECRET: ci-sync-secret-value-at-least-32-characters
+          ADMIN_URL: http://localhost:5000/api/v1
 
-      - name: Frontend Typecheck & Build
-        working-directory: admin-system/frontend
+      - name: Frontend — Typecheck & Build
+        working-directory: packages/frontend
         run: |
           npm ci
           npm run lint
           npm run build
+
+      - name: Security — Environment separation check
+        run: bash scripts/check-env-separation.sh
+        env:
+          SECURITY_ENV_STRICT: 'true'
 
   deploy:
     name: Deploy to Staging Server
     needs: validate
     runs-on: ubuntu-latest
     environment: staging
+    # Chỉ deploy khi staging server đã được cấu hình
+    if: vars.STAGING_ENABLED == 'true'
+    outputs:
+      deployed_sha: ${{ github.sha }}
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-      - name: Configure Staging Environment
+      - name: Deploy via SSH — Pull & Restart
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.STAGING_SSH_KEY }}
+          STAGING_USER: ${{ secrets.STAGING_SSH_USER }}
+          STAGING_HOST: ${{ secrets.STAGING_HOST }}
+          DEPLOY_PATH: ${{ secrets.STAGING_DEPLOY_PATH }}
         run: |
-          echo "Staging deployment triggered for commit ${{ github.sha }} on ${{ github.ref_name }}"
-          # When staging SSH secrets are configured, execute remote update:
-          # ssh ${{ secrets.STAGING_SSH_USER }}@${{ secrets.STAGING_HOST }} 'cd /opt/employee-management && git pull origin develop && docker compose -f docker-compose.staging.yml up -d --build'
+          # Ghi SSH key tạm thời
+          mkdir -p ~/.ssh
+          echo "$SSH_PRIVATE_KEY" > ~/.ssh/staging_key
+          chmod 600 ~/.ssh/staging_key
 
-      - name: Notify Staging Deployment Status
-        if: always()
+          # Thêm host key vào known_hosts để tránh prompt interactive
+          ssh-keyscan -H "$STAGING_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+
+          # Deploy: git pull → rebuild → restart với health check
+          ssh -i ~/.ssh/staging_key -o StrictHostKeyChecking=yes \
+            "$STAGING_USER@$STAGING_HOST" \
+            "cd $DEPLOY_PATH && \
+             git fetch origin && \
+             git checkout ${{ github.sha }} && \
+             docker compose --env-file .env.docker pull --quiet && \
+             docker compose --env-file .env.docker up -d --build --remove-orphans && \
+             echo 'Deploy complete: ${{ github.sha }}'"
+
+          # Xóa key sau khi dùng
+          rm -f ~/.ssh/staging_key
+
+  smoke-test:
+    name: Smoke Test — Verify Staging Health
+    needs: deploy
+    runs-on: ubuntu-latest
+    environment: staging
+    if: vars.STAGING_ENABLED == 'true'
+    steps:
+      - name: Wait for services to start (30s)
+        run: sleep 30
+
+      - name: Smoke test — Admin Backend /health
+        env:
+          HEALTH_URL: ${{ secrets.STAGING_HEALTH_URL }}
         run: |
-          echo "Staging pipeline status: ${{ job.status }}"
+          echo "Checking $HEALTH_URL ..."
+          for attempt in 1 2 3 4 5; do
+            HTTP_CODE=$(curl -sk -o /dev/null -w '%{http_code}' "$HEALTH_URL" || echo "000")
+            echo "Attempt $attempt: HTTP $HTTP_CODE"
+            if [ "$HTTP_CODE" = "200" ]; then
+              echo "✅ Staging is healthy (HTTP 200)"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "❌ Staging health check failed after 5 attempts. Triggering rollback."
+          exit 1
+
+      - name: Rollback on failure
+        if: failure()
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.STAGING_SSH_KEY }}
+          STAGING_USER: ${{ secrets.STAGING_SSH_USER }}
+          STAGING_HOST: ${{ secrets.STAGING_HOST }}
+          DEPLOY_PATH: ${{ secrets.STAGING_DEPLOY_PATH }}
+        run: |
+          echo "⚠️  Rolling back to previous version..."
+          mkdir -p ~/.ssh
+          echo "$SSH_PRIVATE_KEY" > ~/.ssh/staging_key
+          chmod 600 ~/.ssh/staging_key
+          ssh-keyscan -H "$STAGING_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+
+          ssh -i ~/.ssh/staging_key -o StrictHostKeyChecking=yes \
+            "$STAGING_USER@$STAGING_HOST" \
+            "cd $DEPLOY_PATH && \
+             git checkout HEAD~1 && \
+             docker compose --env-file .env.docker up -d --build"
+
+          rm -f ~/.ssh/staging_key
+
+  notify:
+    name: Notify Deployment Result
+    needs: [validate, deploy, smoke-test]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Report result
+        run: |
+          echo "===== STAGING DEPLOYMENT SUMMARY ====="
+          echo "Commit:    ${{ github.sha }}"
+          echo "Branch:    ${{ github.ref_name }}"
+          echo "Validate:  ${{ needs.validate.result }}"
+          echo "Deploy:    ${{ needs.deploy.result }}"
+          echo "Smoke:     ${{ needs.smoke-test.result }}"
+          echo "======================================="
+          # Khi STAGING_ENABLED != true, validate vẫn chạy.
+          # Deploy và smoke-test được skip có kiểm soát.
+          if [ "${{ needs.validate.result }}" != "success" ]; then
+            echo "❌ Validation failed — không deploy."
+            exit 1
+          fi
+          echo "✅ Pipeline hoàn thành."

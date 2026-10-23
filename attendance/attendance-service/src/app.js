@@ -20,10 +20,30 @@ app.use(cors({
 }));
 app.use(express.json());
 
-// Basic health check
+const mongoose = require('mongoose');
+
+// Liveness check (process is running)
 app.get('/health', (req, res) => {
     res.json({ status: 'ok', service: 'attendance-core' });
 });
+
+// Giai đoạn 6: Readiness check (xác minh MongoDB và dependencies thực sự sẵn sàng)
+app.get('/health/ready', (req, res) => {
+    const isDbConnected = mongoose.connection.readyState === 1;
+    if (!isDbConnected) {
+        return res.status(503).json({
+            status: 'degraded',
+            service: 'attendance-core',
+            database: 'disconnected',
+        });
+    }
+    res.json({
+        status: 'ready',
+        service: 'attendance-core',
+        database: 'connected',
+    });
+});
+app.get('/ready', (req, res) => res.redirect(307, '/health/ready'));
 
 // Import routes
 app.use('/api/attendance', require('./routes/attendance.routes.js'));

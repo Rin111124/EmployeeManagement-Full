@@ -122,24 +122,29 @@ flowchart TD
 
 ```text
 EmployeeManagement/
-├── admin-system/
-│   ├── backend/                  # Enterprise Express REST API + BullMQ workers
-│   └── frontend/                 # React 19 + Vite admin management portal
-├── attendance-system/
-│   ├── ai-service/               # FastAPI face vector embedding service
+├── packages/
+│   ├── backend/                  # Enterprise Express REST API + MongoDB HRMS
+│   └── frontend/                 # React 19 + Vite + TypeScript admin portal
+├── attendance/
+│   ├── ai-service/               # FastAPI Python InsightFace + ONNX PAD service
 │   ├── attendance-service/       # Node.js edge attendance core + Outbox DLQ
-│   ├── mobile-app/               # Expo/React Native tablet kiosk terminal
+│   ├── mobile-app/               # Expo/React Native tablet kiosk terminal (Android)
 │   └── employee-mobile-app/      # Expo employee self-service mobile app
 ├── deployment/
-│   └── nginx/                    # Production reverse proxy configuration & SSL certs
+│   ├── nginx/                    # Production Nginx reverse proxy configuration & TLS
+│   └── secrets/                  # Backup encryption keys & model mounts
 ├── docs/
+│   ├── guides/                   # Production Readiness, ISO 25010, Data Inventory, Privacy
 │   ├── planning/                 # RACI, Biometric Consent, ISO 25010 Quality Matrix
 │   └── runbooks/                 # Disaster Recovery, Cert Rotation, Device Verification
 ├── scripts/
 │   ├── backup/                   # Encrypted MongoDB backup & restore utilities (AES)
-│   └── check-env-separation.sh   # CI environment segregation guard
-├── uml-diagrams/                 # Comprehensive PlantUML & SVG architecture diagrams
-├── docker-compose.yml            # Multi-service container orchestration
+│   ├── benchmark/                # Performance & load benchmark drill
+│   ├── contracts/                # ISO/IEC 25010 API contract test suite
+│   ├── security/                 # Air-gap zero-leakage security audit
+│   └── generate-staging-certs.ps1 # Self-signed TLS cert generator for staging/local
+├── docker-compose.yml            # Multi-service development container orchestration
+├── docker-compose.prod.yml       # Production container orchestration (internal isolation)
 ├── package.json                  # Root monorepo workspace configuration
 └── README.md
 ```
@@ -148,30 +153,37 @@ EmployeeManagement/
 
 ## ⚡ Quick Start
 
-### Option A: One-Command Docker Compose (Recommended)
+### Option A: One-Command Docker Compose (Production / Staging)
 
-Run the full production stack inside isolated containers:
+Run the full production stack inside isolated containers with Nginx TLS termination:
 
 ```bash
 # 1. Clone repository
 git clone https://github.com/Rin111124/EmployeeManagement-Full.git
-cd EmployeeManagement-Full
+cd EmployeeManagement
 
-# 2. Configure environment
+# 2. Generate local/staging TLS certificates (or place domain certs in deployment/nginx/certs/)
+powershell -ExecutionPolicy Bypass -File scripts/generate-staging-certs.ps1
+
+# 3. Configure environment file
 cp .env.docker.example .env.docker
 
-# Install the domain's TLS certificate and private key:
-# deployment/nginx/certs/fullchain.pem
-# deployment/nginx/certs/privkey.pem
+# 4. Supply PAD (Presentation Attack Detection) Model
+# Place your verified ONNX PAD model at:
+# attendance/ai-service/models/pad_model.onnx
+# and ensure LIVENESS_MODEL_FILE is set in .env.docker
 
-# 3. Build and launch all services
-docker compose --env-file .env.docker up -d --build
+# 5. Build and launch all services in production mode
+npm run docker:prod:up
+# Or directly:
+# docker compose -f docker-compose.prod.yml --env-file .env.docker up -d --build
 ```
 
 Access the applications:
-- **Admin Portal**: `https://your-domain`
-- **Admin API**: `https://your-domain/api/v1`
-- **Attendance Core**: `https://your-domain/attendance/api`
+- **Admin Portal**: `https://localhost` (or your domain)
+- **Admin API**: `https://localhost/api/v1`
+- **Attendance API**: `https://localhost/attendance/api`
+- **AI Health Probe**: `http://localhost:8000/health` (internal Docker subnet)
 
 The production Compose stack exposes only Nginx on ports 80/443. MongoDB, admin backend, attendance service, and AI service stay on private Docker networks.
 
@@ -182,26 +194,30 @@ The production Compose stack exposes only Nginx on ports 80/443. MongoDB, admin 
 1. **Install all dependencies across the monorepo:**
    ```bash
    npm install
-   npm --prefix admin-system/backend install
-   npm --prefix admin-system/frontend install
-   npm --prefix attendance-system/attendance-service install
-   npm --prefix attendance-system/mobile-app install
-   npm --prefix attendance-system/employee-mobile-app install
+   npm --prefix packages/backend install
+   npm --prefix packages/frontend install
+   npm --prefix attendance/attendance-service install
+   npm --prefix attendance/mobile-app install
+   npm --prefix attendance/employee-mobile-app install
    ```
 
 2. **Initialize Environment Variables:**
    ```bash
-   cp admin-system/backend/.env.example admin-system/backend/.env
-   cp admin-system/frontend/.env.example admin-system/frontend/.env.local
-   cp attendance-system/attendance-service/.env.example attendance-system/attendance-service/.env
-   cp attendance-system/mobile-app/.env.example attendance-system/mobile-app/.env
+   cp packages/backend/.env.example packages/backend/.env
+   cp packages/frontend/.env.example packages/frontend/.env.local
+   cp attendance/attendance-service/.env.example attendance/attendance-service/.env
+   cp attendance/mobile-app/.env.example attendance/mobile-app/.env
+   cp attendance/ai-service/.env.example attendance/ai-service/.env
    ```
 
-3. **Start the AI Microservice (Python):**
+3. **Start the AI Microservice (Python FastAPI + InsightFace):**
    ```bash
-   cd attendance-system/ai-service
+   cd attendance/ai-service
    python -m venv .venv
-   source .venv/bin/activate  # Or on Windows: .venv\Scripts\activate
+   # Windows:
+   .venv\Scripts\activate
+   # Linux/macOS:
+   # source .venv/bin/activate
    pip install -r requirements.txt
    python main.py
    ```
@@ -233,11 +249,14 @@ bash scripts/check-env-separation.sh
 ```
 
 ### Verified Test Suites Breakdown:
-- **Admin Backend (`node --test`)**: 141 passing tests (Auth, Token family, CryptoVault, Payroll Engine, Kiosk Security, CSRF/XSS, Retention).
-- **Attendance Core (`node --test`)**: 37 passing tests (Chaos recovery, Event Idempotency, Outbox DLQ retry, Face Matching).
-- **AI Service (`python -m unittest -v test_ai_service`)**: 11 passing tests (API validation, matching, centroid, and invalid uploads; no real anti-spoof evaluation).
+- **Admin Backend (`node --test`)**: 227 passing tests (Auth, TOTP 2FA, Token Family, CryptoVault, Payroll UAT, Golden Payroll Shadow, Disaster Recovery Drill, CSRF/XSS, Retention).
+- **Attendance Service (`node --test`)**: 45 passing tests (Chaos recovery, Event Idempotency, Outbox DLQ retry, Face Matching, AI Attestation, Device Lifecycle).
+- **Kiosk Terminal App (`node --test` & `tsc`)**: 12 passing tests (Offline Queue, Face Enrollment, Attestation, Token auto-recovery, Flush idempotency; `tsc` 0 errors).
+- **AI Service (`python -m unittest`)**: 13 passing tests (InsightFace matching, PAD liveness heuristic, anti-spoof checks, /health diagnostics).
+- **ISO/IEC 25010 Contracts & Security (`node --test`)**: 8 contract tests passing, encrypted backup/restore drill (RTO 60ms).
+- **Performance Benchmark**: p95 vector matching < 1ms, outbox throughput 3,300+ events/sec.
 - **Admin Frontend**: 0 TypeScript compilation errors (`tsc --noEmit`), Playwright E2E ready.
-- **Mobile Kiosks**: 0 ESLint warnings (`expo lint`).
+- **Code Quality**: 0 ESLint warnings (`npm run lint:all`).
 
 ---
 

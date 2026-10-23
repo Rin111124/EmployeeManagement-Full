@@ -155,7 +155,7 @@ test('employee sync restores face embeddings from admin payload', async () => {
 
     const synced = await LocalEmployee.findOne({ employee_id: 'emp-sync-001' });
     assert.ok(synced);
-    assert.equal(synced.face_embedding.length, 512);
+    assert.equal(synced.getDecryptedEmbedding().length, 512);
 });
 
 test('recognition rejects spoofed attacks when liveness verification fails', async () => {
@@ -194,4 +194,21 @@ test('recognition rejects spoofed attacks when liveness verification fails', asy
 
     assert.equal(lowScoreResponse.body.success, false);
     assert.equal(lowScoreResponse.body.code, 'LIVENESS_FAILED');
+
+    // 3. Missing liveness when REQUIRE_LIVENESS is enabled
+    process.env.REQUIRE_LIVENESS = 'true';
+    try {
+        const missingLivenessResponse = await request(app)
+            .post('/api/attendance/recognize')
+            .send({
+                embedding,
+                device_id: 'CAM-001',
+            })
+            .expect(403);
+
+        assert.equal(missingLivenessResponse.body.success, false);
+        assert.equal(missingLivenessResponse.body.code, 'LIVENESS_FAILED');
+    } finally {
+        delete process.env.REQUIRE_LIVENESS;
+    }
 });

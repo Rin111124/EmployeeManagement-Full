@@ -6,6 +6,7 @@ const mongoose = require('mongoose');
 const { MongoMemoryServer } = require('mongodb-memory-server');
 const app = require('../src/app');
 const LocalEmployee = require('../src/models/LocalEmployee');
+const { decryptJSON } = require('../src/utils/cryptoVault');
 
 let mongo;
 
@@ -81,7 +82,8 @@ describe('Face Registration and Matching', () => {
                 employee_id: '507f1f77bcf86cd799439011'
             });
             expect(saved).toBeDefined();
-            expect(saved.face_embedding.length).toBe(512);
+            const decrypted = decryptJSON(saved.face_embedding);
+            expect(decrypted.length).toBe(512);
         });
 
         test('should reject invalid embedding - wrong dimension', async () => {
@@ -153,7 +155,8 @@ describe('Face Registration and Matching', () => {
                 employee_id: '507f1f77bcf86cd799439011'
             });
             expect(saved.full_name).toBe('John Doe Updated');
-            expect(saved.face_embedding[0]).toBe(newEmbedding[0]);
+            const decrypted = decryptJSON(saved.face_embedding);
+            expect(decrypted[0]).toBe(newEmbedding[0]);
         });
     });
 

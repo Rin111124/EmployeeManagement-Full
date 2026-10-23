@@ -23,7 +23,6 @@
       "permissions": [
         "CAMERA"
       ],
-      "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false
     },
     "web": {
@@ -32,10 +31,12 @@
     },
     "plugins": [
       "expo-router",
+      "./plugins/with-camera-compatible-preview",
       [
         "expo-camera",
         {
-          "cameraPermission": "Cho phép ứng dụng sử dụng camera để nhận diện khuôn mặt chấm công"
+          "cameraPermission": "Cho phép ứng dụng sử dụng camera để nhận diện khuôn mặt chấm công",
+          "recordAudioAndroid": false
         }
       ],
       [

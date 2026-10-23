@@ -82,13 +82,17 @@ function validateEmbedding(embedding) {
     return true;
 }
 
+const { verifyAiAttestation } = require('./aiAttestation');
+
 /**
- * P1-BIO-02: Validate liveness & anti-spoofing score from kiosk / AI service.
+ * P1-BIO-02 & Giai đoạn 1: Validate liveness & anti-spoofing score from kiosk / AI service.
  * Rejects printed photo attacks, phone screen replays, and video loops.
+ * Verifies cryptographic attestation signed by AI service/Admin to prevent spoofed client payloads.
  *
  * @param {object} payload - Request payload or face metadata
  * @param {number} [payload.liveness_score] - Score between 0.0 and 1.0
  * @param {boolean} [payload.is_live] - Explicit boolean flag if computed on device
+ * @param {object} [payload.ai_attestation] - Cryptographic token signed server-side
  * @returns {{ valid: boolean, reason?: string }}
  */
 function validateLiveness(payload) {
@@ -106,6 +110,36 @@ function validateLiveness(payload) {
             return {
                 valid: false,
                 reason: `Liveness score (${payload.liveness_score.toFixed(2)}) below required threshold (${MIN_LIVENESS_SCORE})`,
+            };
+        }
+    }
+
+    // Giai đoạn 1 (P0): Kiểm tra chữ ký mật mã ai_attestation
+    if (payload.ai_attestation) {
+        const attestationCheck = verifyAiAttestation(payload.ai_attestation, payload);
+        if (!attestationCheck.valid) {
+            return {
+                valid: false,
+                reason: `Attestation verification failed: ${attestationCheck.reason}`,
+            };
+        }
+    } else {
+        const requireAttestation = process.env.REQUIRE_LIVENESS_ATTESTATION === 'true' ||
+            process.env.NODE_ENV === 'production';
+        if (requireAttestation) {
+            return {
+                valid: false,
+                reason: 'Missing cryptographic AI biometric attestation token (Client-reported liveness without server attestation is rejected in production)',
+            };
+        }
+    }
+
+    const requireLiveness = process.env.REQUIRE_LIVENESS === 'true' || process.env.NODE_ENV === 'production';
+    if (requireLiveness) {
+        if (typeof payload.liveness_score !== 'number' && typeof payload.is_live !== 'boolean' && !payload.ai_attestation) {
+            return {
+                valid: false,
+                reason: 'Missing required liveness verification evidence (Anti-spoofing is enforced in production)',
             };
         }
     }

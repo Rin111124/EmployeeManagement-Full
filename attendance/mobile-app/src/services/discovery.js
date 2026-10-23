@@ -29,31 +29,69 @@ export const getExpoHost = () => {
 /**
  * Kiểm tra xem 1 host IP có backend admin server (port 5000) đang phản hồi không
  */
-export const probeHost = async (host, timeoutMs = 800) => {
-  if (!host || typeof host !== 'string') return false;
-  const cleanHost = host.trim().replace(/^https?:\/\//, '').split(':')[0].replace(/\/.*$/, '');
-  if (!cleanHost) return false;
+export const probeHost = async (target, timeoutMs = 800) => {
+  if (!target || typeof target !== 'string') return false;
+  let healthUrl;
+  try {
+    const value = target.trim();
+    const hasProtocol = /^https?:\/\//i.test(value);
+    const hasPort = /^https?:\/\/[^/]+:\d+/i.test(value);
+    const parsed = new URL(hasProtocol ? value : `http://${value}${hasPort || value.includes(':') ? '' : ':5000'}`);
+    healthUrl = `${parsed.origin}/health`;
+  } catch (_err) {
+    return false;
+  }
 
-  const url = `http://${cleanHost}:5000/health`;
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const res = await fetch(healthUrl, {
+        method: 'GET',
+        headers: { Accept: 'application/json' },
+        signal: controller.signal,
+      });
 
-    const res = await fetch(url, {
-      method: 'GET',
-      headers: { Accept: 'application/json' },
-      signal: controller.signal,
-    });
-    clearTimeout(timeoutId);
-
-    if (res.ok || res.status === 200 || res.status === 304) {
-      debugLog(`[DISCOVERY] Probe SUCCESS on ${cleanHost}`);
-      return true;
+      const contentType = res.headers.get('content-type') || '';
+      if (res.ok && contentType.includes('application/json')) {
+        const health = await res.json();
+        if (health?.success !== true) return false;
+        debugLog(`[DISCOVERY] Probe SUCCESS on ${healthUrl}`);
+        return true;
+      }
+    } finally {
+      clearTimeout(timeoutId);
     }
   } catch (_err) {
     // Host không phản hồi hoặc timeout
   }
   return false;
+};
+
+const getDiscoveredConfig = (host, port) => {
+  const origin = port === 80 ? `http://${host}`
+    : port === 443 ? `https://${host}`
+      : `http://${host}:${port}`;
+  const isDirectBackend = port === 5000;
+  return {
+    success: true,
+    host,
+    adminUrl: origin,
+    aiServiceUrl: isDirectBackend ? `http://${host}:8000` : origin,
+    attendanceUrl: isDirectBackend ? `http://${host}:5001/api` : `${origin}/attendance/api`,
+  };
+};
+
+const probeServerOnHost = async (host, timeoutMs = 700) => {
+  const ports = [5000, 80, 443];
+  const results = await Promise.all(ports.map(async (port) => {
+    const origin = port === 80 ? `http://${host}`
+      : port === 443 ? `https://${host}`
+        : `http://${host}:${port}`;
+    return await probeHost(origin, timeoutMs);
+  }));
+  const foundIndex = results.findIndex(Boolean);
+  return foundIndex < 0 ? null : getDiscoveredConfig(host, ports[foundIndex]);
 };
 
 /**
@@ -85,16 +123,8 @@ export const discoverServerHost = async (onProgress) => {
   // 3. Kiểm tra các candidate ưu tiên trước (rất nhanh, < 300ms)
   for (const host of candidatesPriority) {
     if (onProgress) onProgress(`Kiểm tra ${host}...`);
-    const isLive = await probeHost(host, 700);
-    if (isLive) {
-      return {
-        success: true,
-        host,
-        adminUrl: `http://${host}:5000`,
-        aiServiceUrl: `http://${host}:8000`,
-        attendanceUrl: `http://${host}:5001/api`,
-      };
-    }
+    const found = await probeServerOnHost(host);
+    if (found) return found;
   }
 
   // 4. Lấy IP của thiết bị hiện tại để quét dải mạng Subnet
@@ -109,13 +139,9 @@ export const discoverServerHost = async (onProgress) => {
       const subnetPrefix = `${parts[0]}.${parts[1]}.${parts[2]}.`;
       if (onProgress) onProgress(`Quét dải mạng ${subnetPrefix}x...`);
 
-      // Danh sách các IP phổ biến thường được cấp cho máy chủ/PC dev
-      const commonSuffixes = [
-        parseInt(parts[3], 10), // Chính máy này (nếu dev trên PC)
-        25, 1, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110,
-        2, 3, 4, 5, 6, 7, 8, 9, 10, 15, 20, 30, 50, 60, 70, 80, 90,
-        150, 200
-      ];
+      // Search the complete local /24. Servers often use a DHCP address that
+      // is not one of the usual development-machine suffixes.
+      const commonSuffixes = Array.from({ length: 254 }, (_, index) => index + 1);
 
       const subnetCandidates = [];
       for (const suffix of commonSuffixes) {
@@ -128,29 +154,22 @@ export const discoverServerHost = async (onProgress) => {
         }
       }
 
-      // Quét song song từng đợt (batch) 8 IP cùng lúc để tối ưu tốc độ
-      const batchSize = 8;
+      // Probe common backend and reverse-proxy ports in bounded batches.
+      const batchSize = 32;
       for (let i = 0; i < subnetCandidates.length; i += batchSize) {
         const batch = subnetCandidates.slice(i, i + batchSize);
         if (onProgress) onProgress(`Đang quét ${batch[0]} -> ${batch[batch.length - 1]}...`);
 
         const results = await Promise.all(
           batch.map(async (ip) => {
-            const ok = await probeHost(ip, 700);
-            return ok ? ip : null;
+            return await probeServerOnHost(ip, 500);
           })
         );
 
         const found = results.find(Boolean);
         if (found) {
-          debugLog(`[DISCOVERY] Server found on subnet: ${found}`);
-          return {
-            success: true,
-            host: found,
-            adminUrl: `http://${found}:5000`,
-            aiServiceUrl: `http://${found}:8000`,
-            attendanceUrl: `http://${found}:5001/api`,
-          };
+          debugLog(`[DISCOVERY] Server found on subnet: ${found.host}`);
+          return found;
         }
       }
     }

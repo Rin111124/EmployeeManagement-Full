@@ -1,0 +1,17 @@
+# .trivyignore — Managed Trivy Vulnerability Exceptions
+#
+# Mục đích: Khai báo ngoại lệ Trivy có owner và deadline.
+# CI sẽ BLOCK nếu phát hiện Critical/High mà KHÔNG có trong file này.
+#
+# Quy tắc thêm ngoại lệ:
+#   1. Chỉ thêm khi đã có owner xác nhận và có hạn xử lý cụ thể.
+#   2. Comment PHẢI bao gồm: CVE ID, lý do, owner, deadline.
+#   3. Review lại file này mỗi sprint/release.
+#   4. Xóa entry khi đã upgrade hoặc quá deadline.
+#
+# Format:
+#   CVE-XXXX-XXXXX  # Reason: ... | Owner: ... | Deadline: YYYY-MM-DD
+#
+# Xem thêm: docs/security/trivy-exceptions.md
+#
+# Hiện tại: Không có ngoại lệ. Mọi Critical/High phải được xử lý.

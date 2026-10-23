@@ -188,7 +188,7 @@ export default function EmployeeForm({
                 await create.mutateAsync(payload);
                 toast(t('employees:created_success'));
             }
-            onDone && onDone(true);
+            onDone?.(true);
         } catch (e: any) {
             console.error('Save failed:', e.response || e);
             const data = e.response;
@@ -216,7 +216,7 @@ export default function EmployeeForm({
 
     const handleCancel = () => {
         onAvatarChange?.(initial?.avatar || null);
-        onDone && onDone(false);
+        onDone?.(false);
     };
 
     return (

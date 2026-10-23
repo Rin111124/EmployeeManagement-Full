@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const Attendance = require('../models/Attendance');
 const LocalEmployee = require('../models/LocalEmployee');
 const LocalDevice = require('../models/LocalDevice');
@@ -10,6 +11,7 @@ const {
     CONFIDENCE_THRESHOLD,
     MAX_CANDIDATES_PER_INFERENCE,
 } = require('../utils/faceMatching');
+const { decryptJSON } = require('../utils/cryptoVault');
 
 const axios = require('axios');
 const env = require('../config/env');
@@ -48,7 +50,7 @@ exports.recognize = async (req, res) => {
         // P1-BIO-07: Query candidate vector boundary limited to active employees & capped batch
         const employees = await LocalEmployee.find({
             status: 'Active',
-            face_embedding: { $exists: true, $not: { $size: 0 } }
+            face_embedding: { $ne: null }
         }).limit(MAX_CANDIDATES_PER_INFERENCE);
 
         if (employees.length === 0) {
@@ -64,11 +66,26 @@ exports.recognize = async (req, res) => {
         let maxSimilarity = -1;
 
         try {
-            // Chuẩn bị dữ liệu cho AI service
-            const candidates = employees.map(emp => ({
-                id: emp.employee_id,
-                embedding: emp.face_embedding
-            }));
+            // Chuẩn bị dữ liệu cho AI service (giải mã embedding đã mã hóa từ DB)
+            const candidates = employees
+                .map(emp => {
+                    const decrypted = emp.getDecryptedEmbedding ? emp.getDecryptedEmbedding() : decryptJSON(emp.face_embedding);
+                    if (!Array.isArray(decrypted)) return null;
+                    return {
+                        id: emp.employee_id,
+                        embedding: decrypted
+                    };
+                })
+                .filter(Boolean);
+
+            if (candidates.length === 0) {
+                return res.status(404).json({
+                    success: false,
+                    code: 'NO_VALID_ENROLLED_FACE',
+                    message: 'Khong co du lieu khuon mat hop le sau khi giai ma',
+                    confidence: -1
+                });
+            }
 
             // Gọi AI service để tính toán so khớp vector (Vectorized Search)
             const aiResponse = await axios.post(`${env.aiServiceUrl}/compute-match`, {
@@ -91,7 +108,9 @@ exports.recognize = async (req, res) => {
             // Fallback: Nếu AI service lỗi, dùng vòng lặp truyền thống để đảm bảo hệ thống vẫn chạy
             for (const emp of employees) {
                 try {
-                    const similarity = cosineSimilarity(embedding, emp.face_embedding);
+                    const decrypted = emp.getDecryptedEmbedding ? emp.getDecryptedEmbedding() : decryptJSON(emp.face_embedding);
+                    if (!Array.isArray(decrypted)) continue;
+                    const similarity = cosineSimilarity(embedding, decrypted);
                     if (similarity > maxSimilarity) {
                         maxSimilarity = similarity;
                         bestMatch = emp;
@@ -159,17 +178,52 @@ exports.recognize = async (req, res) => {
             });
         }
 
-        // Create new check-in record
-        const attendance = await Attendance.create({
-            employee_id: bestMatch.employee_id,
-            device_id,
-            check_in: new Date(),
-            confidence,
-            status: 'present'
-        });
-
-        // Push check-in to admin via outbox (reliable sync)
-        pushAttendanceToAdmin(attendance).catch(console.error);
+        // Create new check-in record atomically with outbox
+        let attendanceRecord;
+        try {
+            const session = await mongoose.startSession();
+            try {
+                await session.withTransaction(async () => {
+                    const created = await Attendance.create(
+                        [{
+                            employee_id: bestMatch.employee_id,
+                            device_id,
+                            check_in: new Date(),
+                            confidence,
+                            status: 'present'
+                        }],
+                        { session }
+                    );
+                    attendanceRecord = created[0];
+                    await pushAttendanceToAdmin(attendanceRecord, { session });
+                });
+            } catch (txError) {
+                // Graceful fallback for standalone MongoDB where replica sets are not configured
+                if (txError.message && (txError.message.includes('replica set') || txError.message.includes('standalone'))) {
+                    attendanceRecord = await Attendance.create({
+                        employee_id: bestMatch.employee_id,
+                        device_id,
+                        check_in: new Date(),
+                        confidence,
+                        status: 'present'
+                    });
+                    await pushAttendanceToAdmin(attendanceRecord);
+                } else {
+                    throw txError;
+                }
+            } finally {
+                await session.endSession();
+            }
+        } catch (_sessErr) {
+            attendanceRecord = await Attendance.create({
+                employee_id: bestMatch.employee_id,
+                device_id,
+                check_in: new Date(),
+                confidence,
+                status: 'present'
+            });
+            await pushAttendanceToAdmin(attendanceRecord);
+        }
 
         return res.status(200).json({
             success: true,
@@ -193,6 +247,15 @@ exports.checkIn = async (req, res) => {
     try {
         if (!req.body.employee_id || !req.body.device_id) {
             return res.status(400).json({ success: false, message: 'employee_id and device_id are required' });
+        }
+
+        // P0 Sec: Chống bypass nhận diện sinh trắc học khi chạy production
+        if (process.env.NODE_ENV === 'production' && !req.headers['x-sync-secret'] && !req.headers['x-device-token']) {
+            return res.status(403).json({
+                success: false,
+                code: 'MANUAL_CHECKIN_UNAUTHORIZED',
+                message: 'Manual check-in requires authorized credentials or sync secret in production',
+            });
         }
 
         const payload = {
